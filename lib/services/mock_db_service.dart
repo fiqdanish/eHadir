@@ -1,0 +1,456 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/user.dart';
+import '../models/student.dart';
+import '../models/student_model.dart';
+import '../models/timetable.dart';
+import '../models/booking.dart';
+import '../models/room.dart';
+import '../models/notification.dart';
+import '../models/class_slot_model.dart';
+import '../models/discipline_report_model.dart';
+import 'package:uuid/uuid.dart';
+
+/// In-memory data service for timetables, attendance, bookings,
+/// and discipline reports. Firebase Auth handles user identity;
+/// this service handles all structured app data.
+class MockDatabaseService extends ChangeNotifier {
+  final _uuid = const Uuid();
+
+  // ─── Data Tables ────────────────────────────────────────────
+  List<AppUser> users = [];
+  List<Room> rooms = [];
+  List<Student> students = [];
+  List<StudentModel> studentModels = [];
+  List<Timetable> masterTimetable = [];
+  List<Booking> allBookings = [];
+  List<AppNotification> notifications = [];
+  List<ClassSlotModel> classSlots = [];
+  List<DisciplineReportModel> disciplineReports = [];
+
+  // ─── Convenience getters ────────────────────────────────────
+  List<Booking> get pendingBookings =>
+      allBookings.where((b) => b.status == BookingStatus.pending).toList();
+
+  List<Booking> get approvedBookings =>
+      allBookings.where((b) => b.status == BookingStatus.approved).toList();
+
+  List<Booking> get rejectedBookings =>
+      allBookings.where((b) => b.status == BookingStatus.rejected).toList();
+
+  MockDatabaseService() {
+    _seedData();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  SEED DATA
+  // ═══════════════════════════════════════════════════════════
+  void _seedData() {
+    _seedUsers();
+    _seedRooms();
+    _seedStudents();
+    _seedTimetable();
+  }
+
+  void _seedUsers() {
+    users.addAll([
+      AppUser(id: 'u1', name: 'Ts. Choh Jing Yi', email: 'choh@graduate.utm.my',
+          role: UserRole.pensyarah, program: 'DCP — Diploma Kompetensi Elektrik (Kuasa)'),
+      AppUser(id: 'u2', name: 'Dr. Afif Shaqir', email: 'afif@graduate.utm.my',
+          role: UserRole.pensyarah, program: 'DGS — Diploma Teknologi Kejuruteraan Gas'),
+      AppUser(id: 'u3', name: 'Pn. Siti Aminah', email: 'siti@ikm.edu.my',
+          role: UserRole.admin, program: 'Global'),
+      AppUser(id: 'u4', name: 'En. Ahmad Razak', email: 'ahmad@ikm.edu.my',
+          role: UserRole.ketuaProgram, program: 'DCP — Diploma Kompetensi Elektrik (Kuasa)'),
+      AppUser(id: 'u5', name: 'Dr. Farah Nadia', email: 'farah@ikm.edu.my',
+          role: UserRole.ketuaJabatan, program: 'DCP — Diploma Kompetensi Elektrik (Kuasa)'),
+      AppUser(id: 'u6', name: 'Prof. Mohd Ismail', email: 'ismail@ikm.edu.my',
+          role: UserRole.timbalanPengarahAkademik, program: 'Global'),
+      AppUser(id: 'u7', name: 'Prof. Irfan', email: 'irfan@graduate.utm.my',
+          role: UserRole.pensyarah, program: 'DGS — Diploma Teknologi Kejuruteraan Gas'),
+    ]);
+  }
+
+  void _seedRooms() {
+    rooms.addAll([
+      Room(id: 'r1', name: 'Bengkel Kimpalan', building: 'Blok A', capacity: 30, type: RoomType.lab,
+           facilities: ['Welding Sets', 'Safety Gear']),
+      Room(id: 'r2', name: 'Bilik Kuliah A1', building: 'Blok A', capacity: 40, type: RoomType.lectureHall,
+           facilities: ['Projector', 'Whiteboard', 'Air-Cond']),
+      Room(id: 'r3', name: 'Bilik Kuliah A2', building: 'Blok A', capacity: 40, type: RoomType.lectureHall,
+           facilities: ['Projector', 'Whiteboard', 'Air-Cond']),
+      Room(id: 'r4', name: 'Makmal Elektrik 1', building: 'Blok B', capacity: 30, type: RoomType.lab,
+           facilities: ['Testing Equipment', 'Whiteboard']),
+      Room(id: 'r5', name: 'Makmal Mekanika 1', building: 'Blok B', capacity: 30, type: RoomType.lab,
+           facilities: ['Heavy Machinery', 'Safety Gear']),
+    ]);
+  }
+
+  void _seedStudents() {
+    // Legacy Student objects (for booking module compatibility)
+    students.addAll([
+      Student(id: 's1', name: 'Ali bin Abu', cohort: 'DCP — Diploma Kompetensi Elektrik (Kuasa)', email: 'ali@student.ikm.edu.my'),
+      Student(id: 's2', name: 'Nurul Aisyah', cohort: 'DCP — Diploma Kompetensi Elektrik (Kuasa)', email: 'nurul@student.ikm.edu.my'),
+      Student(id: 's3', name: 'Tan Wei Ming', cohort: 'DGS — Diploma Teknologi Kejuruteraan Gas', email: 'tan@student.ikm.edu.my'),
+      Student(id: 's4', name: 'Raj Kumar', cohort: 'DGS — Diploma Teknologi Kejuruteraan Gas', email: 'raj@student.ikm.edu.my'),
+      Student(id: 's5', name: 'Fatimah Hassan', cohort: 'DCB — Diploma Lanjutan Kompetensi Elektrik (Penjanaan)', email: 'fatimah@student.ikm.edu.my'),
+      Student(id: 's6', name: 'Muhammad Haziq', cohort: 'DCP — Diploma Kompetensi Elektrik (Kuasa)', email: 'haziq@student.ikm.edu.my'),
+      Student(id: 's7', name: 'Siti Rahim', cohort: 'DGS — Diploma Teknologi Kejuruteraan Gas', email: 'siti.r@student.ikm.edu.my'),
+    ]);
+
+    // Rich StudentModel objects (for attendance tracking)
+    studentModels.addAll([
+      StudentModel(id: 's1', name: 'Ali bin Abu', program: 'DCP — Diploma Kompetensi Elektrik (Kuasa)',
+          attendanceBySubject: {'Software Engineering': ['H', 'H', 'H', 'MC', 'H', 'H', 'T', '', '', '', '', '', '', '']}),
+      StudentModel(id: 's2', name: 'Nurul Aisyah', program: 'DCP — Diploma Kompetensi Elektrik (Kuasa)',
+          attendanceBySubject: {'Software Engineering': ['H', 'H', 'H', 'H', 'H', 'H', 'H', '', '', '', '', '', '', '']}),
+      StudentModel(id: 's6', name: 'Muhammad Haziq', program: 'DCP — Diploma Kompetensi Elektrik (Kuasa)',
+          attendanceBySubject: {'Software Engineering': ['H', 'T', 'T', 'H', 'H', 'T', 'T', '', '', '', '', '', '', '']}),
+      StudentModel(id: 's3', name: 'Tan Wei Ming', program: 'DGS — Diploma Teknologi Kejuruteraan Gas',
+          attendanceBySubject: {'Database Systems': ['H', 'H', 'H', 'H', 'H', 'H', 'H', '', '', '', '', '', '', '']}),
+      StudentModel(id: 's4', name: 'Raj Kumar', program: 'DGS — Diploma Teknologi Kejuruteraan Gas',
+          attendanceBySubject: {'Database Systems': ['H', 'MC', 'H', 'H', 'H', 'H', 'T', '', '', '', '', '', '', '']}),
+      StudentModel(id: 's7', name: 'Siti Rahim', program: 'DGS — Diploma Teknologi Kejuruteraan Gas',
+          attendanceBySubject: {'Database Systems': ['H', 'H', 'H', 'T', 'H', 'H', 'H', '', '', '', '', '', '', '']}),
+      StudentModel(id: 's5', name: 'Fatimah Hassan', program: 'DCB — Diploma Lanjutan Kompetensi Elektrik (Penjanaan)'),
+      StudentModel(id: 's8', name: 'Ahmad Faiz', program: 'IMF — Diploma Industri Siapan Logam'),
+      StudentModel(id: 's9', name: 'Khairul Anwar', program: 'IMF — Diploma Industri Siapan Logam'),
+    ]);
+  }
+
+  void _seedTimetable() {
+    masterTimetable.addAll([
+      Timetable(id: 't1', subject: 'Software Engineering', lecturerId: 'u1', room: 'Makmal Elektrik 1',
+          cohort: 'DCP — Diploma Kompetensi Elektrik (Kuasa)', dayOfWeek: 1,
+          startTime: const TimeOfDay(hour: 9, minute: 0), endTime: const TimeOfDay(hour: 11, minute: 0)),
+      Timetable(id: 't2', subject: 'Database Systems', lecturerId: 'u2', room: 'Bilik Kuliah A1',
+          cohort: 'DGS — Diploma Teknologi Kejuruteraan Gas', dayOfWeek: 1,
+          startTime: const TimeOfDay(hour: 10, minute: 0), endTime: const TimeOfDay(hour: 12, minute: 0)),
+      Timetable(id: 't3', subject: 'Web Development', lecturerId: 'u1', room: 'Bilik Kuliah A2',
+          cohort: 'DCP — Diploma Kompetensi Elektrik (Kuasa)', dayOfWeek: 1,
+          startTime: const TimeOfDay(hour: 14, minute: 0), endTime: const TimeOfDay(hour: 16, minute: 0)),
+      Timetable(id: 't4', subject: 'Data Structures', lecturerId: 'u2', room: 'Makmal Elektrik 1',
+          cohort: 'DGS — Diploma Teknologi Kejuruteraan Gas', dayOfWeek: 2,
+          startTime: const TimeOfDay(hour: 9, minute: 0), endTime: const TimeOfDay(hour: 11, minute: 0)),
+      Timetable(id: 't5', subject: 'Operating Systems', lecturerId: 'u7', room: 'Makmal Mekanika 1',
+          cohort: 'DGS — Diploma Teknologi Kejuruteraan Gas', dayOfWeek: 2,
+          startTime: const TimeOfDay(hour: 11, minute: 0), endTime: const TimeOfDay(hour: 13, minute: 0)),
+      Timetable(id: 't6', subject: 'Software Engineering', lecturerId: 'u1', room: 'Bengkel Kimpalan',
+          cohort: 'DCP — Diploma Kompetensi Elektrik (Kuasa)', dayOfWeek: 3,
+          startTime: const TimeOfDay(hour: 10, minute: 0), endTime: const TimeOfDay(hour: 12, minute: 0)),
+      Timetable(id: 't7', subject: 'Network Security', lecturerId: 'u7', room: 'Bilik Kuliah A1',
+          cohort: 'DGS — Diploma Teknologi Kejuruteraan Gas', dayOfWeek: 3,
+          startTime: const TimeOfDay(hour: 14, minute: 0), endTime: const TimeOfDay(hour: 16, minute: 0)),
+      Timetable(id: 't8', subject: 'Database Systems', lecturerId: 'u2', room: 'Bilik Kuliah A2',
+          cohort: 'DGS — Diploma Teknologi Kejuruteraan Gas', dayOfWeek: 4,
+          startTime: const TimeOfDay(hour: 9, minute: 0), endTime: const TimeOfDay(hour: 11, minute: 0)),
+      Timetable(id: 't9', subject: 'Web Development', lecturerId: 'u1', room: 'Makmal Elektrik 1',
+          cohort: 'DCP — Diploma Kompetensi Elektrik (Kuasa)', dayOfWeek: 4,
+          startTime: const TimeOfDay(hour: 11, minute: 0), endTime: const TimeOfDay(hour: 13, minute: 0)),
+      Timetable(id: 't10', subject: 'Mobile App Development', lecturerId: 'u1', room: 'Makmal Mekanika 1',
+          cohort: 'DCP — Diploma Kompetensi Elektrik (Kuasa)', dayOfWeek: 5,
+          startTime: const TimeOfDay(hour: 9, minute: 0), endTime: const TimeOfDay(hour: 11, minute: 0)),
+    ]);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  USER LOOKUPS
+  // ═══════════════════════════════════════════════════════════
+
+  AppUser? getUserById(String id) {
+    try {
+      return users.firstWhere((u) => u.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String getLecturerName(String id) {
+    return getUserById(id)?.name ?? 'Unknown';
+  }
+
+  List<AppUser> get lecturers =>
+      users.where((u) => u.role == UserRole.pensyarah).toList();
+
+  List<AppUser> get lecturersFromFirestore => users
+      .where((u) => u.role == UserRole.pensyarah)
+      .toList();
+
+  /// Merge Firebase users (from AuthService.fetchAllUsers) into local list
+  void mergeFirestoreUsers(List<AppUser> firestoreUsers) {
+    for (final fu in firestoreUsers) {
+      final idx = users.indexWhere((u) => u.id == fu.id);
+      if (idx == -1) {
+        users.add(fu);
+      } else {
+        users[idx] = fu;
+      }
+    }
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  ROOM QUERIES
+  // ═══════════════════════════════════════════════════════════
+
+  List<String> get roomNames => rooms.map((r) => r.name).toList();
+
+  List<Room> getAvailableRooms(DateTime date, TimeOfDay startTime, TimeOfDay endTime) {
+    final startMin = startTime.hour * 60 + startTime.minute;
+    final endMin = endTime.hour * 60 + endTime.minute;
+    Set<String> occupiedRoomNames = {};
+
+    for (var t in masterTimetable) {
+      if (t.dayOfWeek == date.weekday) {
+        if (startMin < t.endMinutes && endMin > t.startMinutes) {
+          occupiedRoomNames.add(t.room);
+        }
+      }
+    }
+    for (var s in classSlots) {
+      if (s.date.year == date.year && s.date.month == date.month && s.date.day == date.day) {
+        if (startMin < s.endMinutes && endMin > s.startMinutes) {
+          occupiedRoomNames.add(s.roomId);
+        }
+      }
+    }
+    for (var b in approvedBookings) {
+      if (b.date.year == date.year && b.date.month == date.month && b.date.day == date.day) {
+        if (startMin < b.endMinutes && endMin > b.startMinutes) {
+          occupiedRoomNames.add(b.room);
+        }
+      }
+    }
+
+    return rooms.where((r) => !occupiedRoomNames.contains(r.name)).toList();
+  }
+
+  bool isRoomOccupied(String roomName, DateTime date, TimeOfDay startTime, TimeOfDay endTime) {
+    final startMin = startTime.hour * 60 + startTime.minute;
+    final endMin = endTime.hour * 60 + endTime.minute;
+
+    for (var t in masterTimetable) {
+      if (t.dayOfWeek == date.weekday && t.room == roomName) {
+        if (startMin < t.endMinutes && endMin > t.startMinutes) return true;
+      }
+    }
+    for (var b in approvedBookings) {
+      if (b.date.year == date.year && b.date.month == date.month &&
+          b.date.day == date.day && b.room == roomName) {
+        if (startMin < b.endMinutes && endMin > b.startMinutes) return true;
+      }
+    }
+    return false;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  TIMETABLE / CLASS SLOT QUERIES
+  // ═══════════════════════════════════════════════════════════
+
+  List<String> getSubjectsForLecturer(String lecturerId) {
+    final fromMaster = masterTimetable
+        .where((t) => t.lecturerId == lecturerId)
+        .map((t) => t.subject);
+    final fromSlots = classSlots
+        .where((s) => s.lecturerId == lecturerId)
+        .map((s) => s.subjectName);
+    return {...fromMaster, ...fromSlots}.toList();
+  }
+
+  List<String> getCohortsForLecturer(String lecturerId) {
+    return masterTimetable
+        .where((t) => t.lecturerId == lecturerId)
+        .map((t) => t.cohort)
+        .toSet()
+        .toList();
+  }
+
+  /// All class slots assigned to this lecturer (master + uploaded)
+  List<ClassSlotModel> getClassSlotsForLecturer(String lecturerId) {
+    return classSlots.where((s) => s.lecturerId == lecturerId).toList();
+  }
+
+  List<ClassSlotModel> getClassSlotsForProgram(String program) {
+    return classSlots.where((s) => s.program == program).toList();
+  }
+
+
+  List<Timetable> getMergedTimetableForDate(DateTime date, String lecturerId) {
+    List<Timetable> dailySlots = [];
+    for (var t in masterTimetable) {
+      if (t.dayOfWeek == date.weekday && t.lecturerId == lecturerId) {
+        dailySlots.add(t);
+      }
+    }
+    for (var b in approvedBookings) {
+      if (b.date.year == date.year && b.date.month == date.month &&
+          b.date.day == date.day && b.lecturerId == lecturerId) {
+        dailySlots.add(b.toTimetable());
+      }
+    }
+    return dailySlots;
+  }
+
+  /// Upload a new class slot (Ketua Program action)
+  void uploadClassSlot(ClassSlotModel slot) {
+    classSlots.add(slot);
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  STUDENT QUERIES
+  // ═══════════════════════════════════════════════════════════
+
+  List<StudentModel> getStudentsForProgram(String program) {
+    return studentModels.where((s) => s.program == program).toList();
+  }
+
+  void updateAttendance(String studentId, String subjectId, int weekIndex, String status) {
+    final idx = studentModels.indexWhere((s) => s.id == studentId);
+    if (idx == -1) return;
+    studentModels[idx] = studentModels[idx].copyWithAttendance(subjectId, weekIndex, status);
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  DISCIPLINE REPORTS
+  // ═══════════════════════════════════════════════════════════
+
+  void submitDisciplineReport(DisciplineReportModel report) {
+    disciplineReports.add(report);
+    notifyListeners();
+  }
+
+  /// Reports visible only to same-program Ketua Program & Ketua Jabatan
+  List<DisciplineReportModel> getReportsForProgram(String program) {
+    return disciplineReports
+        .where((r) => r.program == program)
+        .toList()
+      ..sort((a, b) => b.reportedAt.compareTo(a.reportedAt));
+  }
+
+  /// All reports (for TPA view)
+  List<DisciplineReportModel> get allDisciplineReports {
+    return List.from(disciplineReports)
+      ..sort((a, b) => b.reportedAt.compareTo(a.reportedAt));
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  BOOKING MODULE (Module 6)
+  // ═══════════════════════════════════════════════════════════
+
+  List<Booking> getBookingsForLecturer(String lecturerId) {
+    return allBookings.where((b) => b.lecturerId == lecturerId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  Future<Booking> submitBookingRequest(Booking booking) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final newBooking = booking.copyWith(id: _uuid.v4(), createdAt: DateTime.now());
+    allBookings.add(newBooking);
+    if (newBooking.status == BookingStatus.pending) {
+      _createNotification(
+        recipientId: 'u3',
+        title: 'New Booking Request',
+        message: '${getLecturerName(newBooking.lecturerId)} requested ${newBooking.room} on ${_formatDate(newBooking.date)}',
+        type: NotificationType.bookingSubmitted,
+        bookingId: newBooking.id,
+      );
+    }
+    notifyListeners();
+    return newBooking;
+  }
+
+  Future<void> approveBooking(String bookingId, String adminId) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    final index = allBookings.indexWhere((b) => b.id == bookingId);
+    if (index == -1) throw Exception('Booking not found');
+    final booking = allBookings[index];
+    if (booking.status != BookingStatus.pending) {
+      throw Exception('Only pending bookings can be approved');
+    }
+    allBookings[index] = booking.copyWith(
+      status: BookingStatus.approved,
+      reviewedBy: adminId,
+      reviewedAt: DateTime.now(),
+    );
+    _createNotification(
+      recipientId: booking.lecturerId,
+      title: 'Booking Approved ✅',
+      message: 'Your booking for ${booking.room} on ${_formatDate(booking.date)} has been approved.',
+      type: NotificationType.bookingApproved,
+      bookingId: bookingId,
+    );
+    notifyListeners();
+  }
+
+  Future<void> rejectBooking(String bookingId, String adminId, {String? reason}) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    final index = allBookings.indexWhere((b) => b.id == bookingId);
+    if (index == -1) throw Exception('Booking not found');
+    final booking = allBookings[index];
+    if (booking.status != BookingStatus.pending) {
+      throw Exception('Only pending bookings can be rejected');
+    }
+    allBookings[index] = booking.copyWith(
+      status: BookingStatus.rejected,
+      reviewedBy: adminId,
+      reviewedAt: DateTime.now(),
+      rejectionReason: reason,
+    );
+    _createNotification(
+      recipientId: booking.lecturerId,
+      title: 'Booking Rejected ❌',
+      message: 'Your booking for ${booking.room} on ${_formatDate(booking.date)} was rejected.${reason != null ? ' Reason: $reason' : ''}',
+      type: NotificationType.bookingRejected,
+      bookingId: bookingId,
+    );
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  NOTIFICATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  List<AppNotification> getNotificationsForUser(String userId) {
+    return notifications.where((n) => n.recipientId == userId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  int getUnreadCount(String userId) {
+    return notifications.where((n) => n.recipientId == userId && !n.isRead).length;
+  }
+
+  void markNotificationRead(String notificationId) {
+    final index = notifications.indexWhere((n) => n.id == notificationId);
+    if (index != -1) {
+      notifications[index] = notifications[index].copyWith(isRead: true);
+      notifyListeners();
+    }
+  }
+
+  void _createNotification({
+    required String recipientId,
+    required String title,
+    required String message,
+    required NotificationType type,
+    String? bookingId,
+  }) {
+    notifications.add(AppNotification(
+      id: _uuid.v4(),
+      recipientId: recipientId,
+      title: title,
+      message: message,
+      type: type,
+      createdAt: DateTime.now(),
+      relatedBookingId: bookingId,
+    ));
+  }
+
+  String _formatDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+}
+
+final mockDbProvider = ChangeNotifierProvider<MockDatabaseService>((ref) {
+  return MockDatabaseService();
+});

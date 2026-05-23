@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "411691750871",
+    "project_id": "ehadir-ff9a9",
+    "storage_bucket": "ehadir-ff9a9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:411691750871:android:50275a671a908a3d256792",
+        "android_client_info": {
+          "package_name": "com.example.assignment1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDRqu319holGRHF03O2-kIz3AAc0czYqX4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
