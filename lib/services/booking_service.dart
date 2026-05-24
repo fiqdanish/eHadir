@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/booking.dart';
+import '../models/class_slot_model.dart';
 import 'mock_db_service.dart';
 import 'package:flutter/material.dart';
 
@@ -116,6 +117,41 @@ class FirestoreBookingService extends ChangeNotifier {
         .get();
 
     return snapshot.docs.map(FirestoreBooking.fromFirestore).toList();
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  CLASS SLOT (JADUAL) — Firestore persistence
+  // ═══════════════════════════════════════════════════════════
+
+  static const String _classSlots = 'classSlots';
+
+  /// Persist a [ClassSlotModel] to the `classSlots` Firestore collection.
+  /// Also stores it in the local mock DB so the conflict engine can
+  /// detect it within the same app session.
+  Future<void> saveClassSlot(ClassSlotModel slot) async {
+    await _db.collection(_classSlots).doc(slot.id).set(slot.toFirestore());
+    mockDb.uploadClassSlot(slot);  // keep in-memory list in sync
+    notifyListeners();
+  }
+
+  /// Real-time stream of class slots for a specific lecturer.
+  Stream<List<ClassSlotModel>> streamClassSlotsForLecturer(String lecturerId) {
+    return _db
+        .collection(_classSlots)
+        .where('lecturerId', isEqualTo: lecturerId)
+        .orderBy('date')
+        .snapshots()
+        .map((snap) => snap.docs.map(ClassSlotModel.fromFirestore).toList());
+  }
+
+  /// Real-time stream of class slots for a specific program.
+  Stream<List<ClassSlotModel>> streamClassSlotsForProgram(String program) {
+    return _db
+        .collection(_classSlots)
+        .where('program', isEqualTo: program)
+        .orderBy('date')
+        .snapshots()
+        .map((snap) => snap.docs.map(ClassSlotModel.fromFirestore).toList());
   }
 }
 

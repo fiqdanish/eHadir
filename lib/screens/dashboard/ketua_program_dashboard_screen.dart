@@ -90,7 +90,6 @@ class _KetuaProgramDashboardScreenState
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
 
-    final db = ref.read(mockDbProvider);
     final bookingService = ref.read(firestoreBookingProvider);
     final auth = ref.read(authProvider);
     final current = auth.currentUser!;
@@ -131,8 +130,7 @@ class _KetuaProgramDashboardScreenState
       endTime: _endTime,
     );
 
-    await Future.delayed(const Duration(milliseconds: 400));
-    db.uploadClassSlot(slot);
+    await bookingService.saveClassSlot(slot);
 
     if (mounted) {
       setState(() {

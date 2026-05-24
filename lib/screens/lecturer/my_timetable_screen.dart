@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../services/mock_db_service.dart';
+import '../../services/booking_service.dart';
 import '../../models/class_slot_model.dart';
 import '../../theme.dart';
 import '../../services/auth_service.dart';
@@ -15,16 +15,14 @@ class MyTimetableScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
-    final db = ref.watch(mockDbProvider);
     final currentUser = auth.currentUser!;
-    
-    List<ClassSlotModel> slots = [];
-    if (currentUser.role == UserRole.ketuaProgram) {
-      slots = db.getClassSlotsForProgram(currentUser.program);
-    } else {
-      slots = db.getClassSlotsForLecturer(currentUser.id);
-    }
-    slots.sort((a, b) => a.date.compareTo(b.date));
+    final bookingService = ref.read(firestoreBookingProvider);
+
+    // Choose the right Firestore stream based on the user's role
+    final Stream<List<ClassSlotModel>> slotsStream =
+        currentUser.role == UserRole.ketuaProgram
+            ? bookingService.streamClassSlotsForProgram(currentUser.program)
+            : bookingService.streamClassSlotsForLecturer(currentUser.id);
 
     return Scaffold(
       body: CustomScrollView(
@@ -38,34 +36,77 @@ class MyTimetableScreen extends ConsumerWidget {
               ),
             ),
           ),
-          if (slots.isEmpty)
-            SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.event_busy_rounded,
-                        size: 64, color: EHadirTheme.textSecondary.withValues(alpha: 0.3)),
-                    const SizedBox(height: 16),
-                    const Text('Tiada jadual ditemui.',
-                        style: TextStyle(color: EHadirTheme.textSecondary)),
-                  ],
-                ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.all(16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) => _TimetableCard(
-                    slot: slots[i],
-                    onTakeAttendance: onTakeAttendance,
+          // Stream directly from Firestore — live updates on every change
+          SliverToBoxAdapter(
+            child: StreamBuilder<List<ClassSlotModel>>(
+              stream: slotsStream,
+              builder: (context, snapshot) {
+                // Loading state
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 300,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                // Error state
+                if (snapshot.hasError) {
+                  return SizedBox(
+                    height: 300,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline_rounded,
+                              size: 48, color: EHadirTheme.rejected),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Ralat memuatkan jadual.\n${snapshot.error}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: EHadirTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                final slots = snapshot.data ?? [];
+
+                // Empty state
+                if (slots.isEmpty) {
+                  return const SizedBox(
+                    height: 300,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.event_busy_rounded,
+                              size: 64, color: Color(0x4DFFFFFF)),
+                          SizedBox(height: 16),
+                          Text('Tiada jadual ditemui.',
+                              style: TextStyle(color: EHadirTheme.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                // Slot list
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: slots
+                        .map((slot) => _TimetableCard(
+                              slot: slot,
+                              onTakeAttendance: onTakeAttendance,
+                            ))
+                        .toList(),
                   ),
-                  childCount: slots.length,
-                ),
-              ),
+                );
+              },
             ),
+          ),
         ],
       ),
     );
