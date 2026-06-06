@@ -1,4 +1,5 @@
 import '../models/lecturer_assignment.dart';
+import '../models/student_model.dart';
 import '../models/subject.dart';
 import '../models/user.dart';
 
@@ -147,6 +148,36 @@ class SeedData {
     // Salawati binti Hasan Basari — Maths Unit
     _assign('lec_ded_12', 'Salawati binti Hasan Basari', 'DUM30183', 'MATHEMATICS FOR ELECTRICAL ENGINEERING', 'DED 3A'),
   ];
+
+  // ─── DED 1A student roster (matches the borang kehadiran picture) ───
+  static final List<StudentModel> ded1aStudents = [
+    _student('ded1a_01', 'ADAM HAIQAL BIN ROZLAN'),
+    _student('ded1a_02', 'AHMAD HASNUL ADIB BIN EDHAM'),
+    _student('ded1a_03', 'AIDIEL HAIKAL BIN ZULKARNAIN'),
+    _student('ded1a_04', 'AIMAN AIZAT BIN MAHMMED ZUKEFFLEE'),
+    _student('ded1a_05', 'AMIR IZZUDDIN BIN YUSRI'),
+    _student('ded1a_06', 'BATRISYAH ALMA BINTI AHMAD SUHAIMI'),
+    _student('ded1a_07', 'ELLYSA FARHALIS AZNURIN BINTI AZMI'),
+    _student('ded1a_08', 'MARYAM NAQIBAH BINTI HISYAMUDIN'),
+    _student('ded1a_09', 'MOHAMMAD JAILANI BIN MOHD NAZIR'),
+    _student('ded1a_10', 'MUHAMAMAD AKMAL HAFIZ BIN SHAHARUDDIN'),
+    _student('ded1a_11', 'MUHAMMAD ALIFF AQMAR BIN MOHD KAMAL'),
+    _student('ded1a_12', 'MUHAMMAD AMIRUL AIMAN BIN JUSOH'),
+    _student('ded1a_13', 'MUHAMMAD ARIFF FIKRI BIN MOHD YUNUS'),
+    _student('ded1a_14', 'MUHAMMAD HAFIZ DANIAL BIN ROSLI'),
+    _student('ded1a_15', 'MUHAMMAD HAIKAL SIAHAAN BIN AMRAN'),
+    _student('ded1a_16', 'MUHAMMAD SYAUQI IQBAL BIN KHALID'),
+    _student('ded1a_17', 'MUHAMMAD ZAIREEN SHAH BIN ZAILANI'),
+    _student('ded1a_18', 'MUHAMMAD ZAIRUL AMIRUL BIN ZAINUDDIN'),
+    _student('ded1a_19', 'WAN MUHAMMAD AIZACK BIN WAN MOHD ASRI'),
+  ];
+
+  static StudentModel _student(String id, String name) => StudentModel(
+        id: id,
+        name: name,
+        program: dedProgram,
+        studentClass: 'DED 1A',
+      );
 
   static LecturerAssignment _assign(String lecturerId, String lecturerName,
       String code, String name, String studentClass) {

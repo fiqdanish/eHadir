@@ -108,6 +108,9 @@ class MockDatabaseService extends ChangeNotifier {
       StudentModel(id: 's8', name: 'Ahmad Faiz', program: 'IMF — Diploma Industri Siapan Logam'),
       StudentModel(id: 's9', name: 'Khairul Anwar', program: 'IMF — Diploma Industri Siapan Logam'),
     ]);
+
+    // Real DED 1A class roster from the borang kehadiran template.
+    studentModels.addAll(SeedData.ded1aStudents);
   }
 
   void _seedTimetable() {
@@ -285,6 +288,38 @@ class MockDatabaseService extends ChangeNotifier {
 
   List<StudentModel> getStudentsForProgram(String program) {
     return studentModels.where((s) => s.program == program).toList();
+  }
+
+  /// Students enrolled in a specific class group (e.g. "DED 1A").
+  ///
+  /// Falls back gracefully when the caller's class label is non-standard:
+  ///   1. exact case-insensitive match on [StudentModel.studentClass]
+  ///   2. trimmed / whitespace-normalised compare ("DED1A" ↔ "DED 1A")
+  ///   3. if [program] is provided and steps 1-2 yield nothing, return
+  ///      every student in the program so the lecturer can still mark
+  ///      attendance instead of staring at an empty list
+  List<StudentModel> getStudentsForClass(String studentClass,
+      {String? program}) {
+    String norm(String s) =>
+        s.toLowerCase().replaceAll(RegExp(r'\s+'), '').trim();
+
+    final target = norm(studentClass);
+
+    // Step 1 + 2
+    final exact = studentModels
+        .where((s) => norm(s.studentClass) == target)
+        .toList();
+    if (exact.isNotEmpty) {
+      return exact..sort((a, b) => a.name.compareTo(b.name));
+    }
+
+    // Step 3 — program-wide fallback
+    if (program != null && program.isNotEmpty) {
+      return studentModels.where((s) => s.program == program).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+    }
+
+    return const [];
   }
 
   void updateAttendance(String studentId, String subjectId, int weekIndex, String status) {

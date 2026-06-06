@@ -13,6 +13,53 @@ import '../models/attendance_record.dart';
 class AttendanceService extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   static const String _collection = 'attendanceSessions';
+  static const String _classAttendanceCol = 'classAttendance';
+
+  // ─── Class-attendance (M1..M14 weekly grid) ───────────────
+
+  /// Live stream of the M1..M14 grid for one class.
+  Stream<ClassAttendance?> streamClassAttendance({
+    required String subjectCode,
+    required String studentClass,
+  }) {
+    final id = ClassAttendance.docId(subjectCode, studentClass);
+    return _db.collection(_classAttendanceCol).doc(id).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return ClassAttendance.fromFirestore(doc);
+    });
+  }
+
+  Future<ClassAttendance?> getClassAttendance({
+    required String subjectCode,
+    required String studentClass,
+  }) async {
+    final id = ClassAttendance.docId(subjectCode, studentClass);
+    final doc = await _db.collection(_classAttendanceCol).doc(id).get();
+    if (!doc.exists) return null;
+    return ClassAttendance.fromFirestore(doc);
+  }
+
+  /// Upsert the entire matrix (used after a bulk edit or first creation).
+  Future<void> saveClassAttendance(ClassAttendance a) async {
+    final id = ClassAttendance.docId(a.subjectCode, a.studentClass);
+    await _db
+        .collection(_classAttendanceCol)
+        .doc(id)
+        .set(a.toFirestore(), SetOptions(merge: true));
+    notifyListeners();
+  }
+
+  /// Set a single (studentId, week) cell. Uses a Firestore `update` with dot
+  /// notation so concurrent edits to other cells don't clobber each other.
+  Future<void> setWeekCell({
+    required ClassAttendance base,
+    required String studentId,
+    required int weekIndex,
+    required AttendanceStatus status,
+  }) async {
+    final updated = base.withCell(studentId, weekIndex, status);
+    await saveClassAttendance(updated);
+  }
 
   // ─── Read ─────────────────────────────────────────────────
 

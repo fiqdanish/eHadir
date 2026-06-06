@@ -58,6 +58,132 @@ extension AttendanceStatusX on AttendanceStatus {
   }
 }
 
+/// Per-class semester attendance — one document per (subjectCode, studentClass)
+/// holding the M1..M14 weekly grid for every enrolled student.
+///
+/// Document id: `${subjectCode}_${studentClass}` with spaces collapsed to "_".
+class ClassAttendance {
+  static const int weeksPerSemester = 14;
+
+  final String subjectCode;
+  final String subjectName;
+  final String studentClass;
+  final String program;
+  final String lecturerId;
+  final String lecturerName;
+  /// studentId → list of 14 status codes (`H`, `T`, `MC`, `CK`, `''`).
+  final Map<String, List<String>> weeks;
+  final DateTime? updatedAt;
+
+  const ClassAttendance({
+    required this.subjectCode,
+    required this.subjectName,
+    required this.studentClass,
+    required this.program,
+    required this.lecturerId,
+    required this.lecturerName,
+    required this.weeks,
+    this.updatedAt,
+  });
+
+  static String docId(String subjectCode, String studentClass) =>
+      '${subjectCode}_${studentClass.replaceAll(RegExp(r'\s+'), '_')}';
+
+  AttendanceStatus statusFor(String studentId, int week) {
+    final list = weeks[studentId];
+    if (list == null || week < 0 || week >= weeksPerSemester) {
+      return AttendanceStatus.belum;
+    }
+    return AttendanceStatusX.fromCode(list[week]);
+  }
+
+  double percentageFor(String studentId) {
+    final list = weeks[studentId];
+    if (list == null || list.isEmpty) return 0.0;
+    final taken = list.where((s) => s.isNotEmpty).length;
+    if (taken == 0) return 0.0;
+    final present = list.where((s) => s == 'H').length;
+    return (present / taken) * 100;
+  }
+
+  ClassAttendance withCell(String studentId, int week, AttendanceStatus s) {
+    final next = Map<String, List<String>>.from(weeks);
+    final list = List<String>.from(
+        next[studentId] ?? List.filled(weeksPerSemester, ''));
+    if (week >= 0 && week < weeksPerSemester) {
+      list[week] = s == AttendanceStatus.belum ? '' : s.code;
+    }
+    next[studentId] = list;
+    return ClassAttendance(
+      subjectCode: subjectCode,
+      subjectName: subjectName,
+      studentClass: studentClass,
+      program: program,
+      lecturerId: lecturerId,
+      lecturerName: lecturerName,
+      weeks: next,
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  factory ClassAttendance.empty({
+    required String subjectCode,
+    required String subjectName,
+    required String studentClass,
+    required String program,
+    required String lecturerId,
+    required String lecturerName,
+  }) =>
+      ClassAttendance(
+        subjectCode: subjectCode,
+        subjectName: subjectName,
+        studentClass: studentClass,
+        program: program,
+        lecturerId: lecturerId,
+        lecturerName: lecturerName,
+        weeks: {},
+      );
+
+  factory ClassAttendance.fromFirestore(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    final raw = (d['weeks'] as Map<String, dynamic>? ?? const {});
+    final weeks = <String, List<String>>{};
+    for (final entry in raw.entries) {
+      final list = (entry.value as List?)?.map((e) => e?.toString() ?? '').toList() ??
+          List.filled(weeksPerSemester, '');
+      // Ensure exactly 14 entries
+      while (list.length < weeksPerSemester) {
+        list.add('');
+      }
+      if (list.length > weeksPerSemester) {
+        list.removeRange(weeksPerSemester, list.length);
+      }
+      weeks[entry.key] = list;
+    }
+    return ClassAttendance(
+      subjectCode: d['subjectCode'] ?? '',
+      subjectName: d['subjectName'] ?? '',
+      studentClass: d['studentClass'] ?? '',
+      program: d['program'] ?? '',
+      lecturerId: d['lecturerId'] ?? '',
+      lecturerName: d['lecturerName'] ?? '',
+      weeks: weeks,
+      updatedAt: (d['updatedAt'] as Timestamp?)?.toDate(),
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+        'subjectCode': subjectCode,
+        'subjectName': subjectName,
+        'studentClass': studentClass,
+        'program': program,
+        'lecturerId': lecturerId,
+        'lecturerName': lecturerName,
+        'weeks': weeks,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+}
+
 /// One Firestore document per class slot session.
 /// Document id matches the [ClassSlotModel.id] so each slot has at most one record.
 class AttendanceSession {

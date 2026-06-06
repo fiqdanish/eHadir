@@ -2,14 +2,18 @@ class StudentModel {
   final String id;
   final String name;
   final String program;
+  /// Class group label, e.g. "DED 1A".
+  final String studentClass;
   // Map<subjectId, List<14 week statuses>>
-  // Status values: 'H' = Hadir, 'T' = Tidak Hadir, 'MC' = MC, '' = not taken
+  // Status values: 'H' = Hadir, 'T' = Tidak Hadir, 'MC' = MC, 'CK' = Cuti
+  // Kebenaran, '' = not taken.
   final Map<String, List<String>> attendanceBySubject;
 
   StudentModel({
     required this.id,
     required this.name,
     required this.program,
+    this.studentClass = '',
     Map<String, List<String>>? attendanceBySubject,
   }) : attendanceBySubject = attendanceBySubject ?? {};
 
@@ -44,6 +48,7 @@ class StudentModel {
       id: id,
       name: name,
       program: program,
+      studentClass: studentClass,
       attendanceBySubject: updated,
     );
   }
