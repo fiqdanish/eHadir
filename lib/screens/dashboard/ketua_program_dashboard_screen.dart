@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/discipline_report_model.dart';
 import '../../models/lecturer_assignment.dart';
 import '../../models/user.dart';
 import '../../services/auth_service.dart';
 import '../../services/curriculum_service.dart';
+import '../../services/discipline_service.dart';
 import '../../services/mock_db_service.dart';
 import '../../theme.dart';
 import '../../utils/dialogs.dart';
+import '../ketua_program/laporan_disiplin_kp_screen.dart';
 import '../ketua_program/tugaskan_subjek_screen.dart';
 
 /// Ketua Program dashboard — Ketua Program's job is now ONLY:
@@ -162,6 +165,8 @@ class _KetuaProgramDashboardScreenState
                 children: [
                   _buildPageHeader(),
                   const SizedBox(height: 16),
+                  _buildLaporDisiplinCard(),
+                  const SizedBox(height: 10),
                   _buildTugaskanSubjekCard(),
                   const SizedBox(height: 20),
                   _sectionTitle('Tugaskan Subjek Baharu'),
@@ -351,6 +356,88 @@ class _KetuaProgramDashboardScreenState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLaporDisiplinCard() {
+    final current = ref.watch(authProvider).currentUser!;
+    final service = ref.watch(disciplineServiceProvider);
+    return StreamBuilder<List<DisciplineReportModel>>(
+      stream: service.streamByProgram(current.program),
+      builder: (context, snap) {
+        final reports = snap.data ?? const <DisciplineReportModel>[];
+        final pending =
+            reports.where((r) => r.status == ReportStatus.pending).length;
+        return InkWell(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LaporanDisiplinKpScreen()),
+          ),
+          borderRadius: BorderRadius.circular(EHadirTheme.radiusLg),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: EHadirTheme.card,
+              borderRadius: BorderRadius.circular(EHadirTheme.radiusLg),
+              border: Border.all(
+                color: EHadirTheme.rejected.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: EHadirTheme.rejected.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
+                  ),
+                  child: const Icon(Icons.gavel_rounded,
+                      color: EHadirTheme.rejected, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Laporan Disiplin Pelajar',
+                          style: TextStyle(
+                              color: EHadirTheme.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800)),
+                      SizedBox(height: 2),
+                      Text(
+                          'Semak dan sahkan laporan disiplin daripada pensyarah program',
+                          style: TextStyle(
+                              color: EHadirTheme.textSecondary, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                if (pending > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: EHadirTheme.pending,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$pending baru',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right_rounded,
+                    color: EHadirTheme.textSecondary),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

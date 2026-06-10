@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme.dart';
-import '../lecturer/lapor_disiplin_screen.dart';
+import '../lecturer/sejarah_disiplin_screen.dart';
 import 'reporting_screen.dart';
 
 /// The bottom-nav "Laporan" hub. Two segments:
@@ -39,7 +39,7 @@ class _LaporanHubScreenState extends State<LaporanHubScreen> {
         index: _tab,
         children: const [
           ReportingScreen(),
-          LaporDisiplinScreen(),
+          SejarahDisiplinScreen(),
         ],
       ),
     );
