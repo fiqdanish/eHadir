@@ -4,10 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class ClassSlotModel {
   final String id;
   final String subjectName;
-  final String roomId;       // room name, e.g. "Bilik Kuliah A1"
-  final String lecturerId;   // Firebase uid of the lecturer
+  final String subjectCode;    // e.g. "SECJ1013"
+  final String studentClass;   // e.g. "DED 1A"
+  final String roomId;         // room name, e.g. "Bilik Kuliah A1"
+  final String lecturerId;     // Firebase uid of the lecturer
   final String lecturerName;
-  final String program;      // e.g. "DGS"
+  final String program;        // e.g. "DGS"
   final DateTime date;
   final TimeOfDay startTime;
   final TimeOfDay endTime;
@@ -15,6 +17,8 @@ class ClassSlotModel {
   ClassSlotModel({
     required this.id,
     required this.subjectName,
+    required this.subjectCode,
+    required this.studentClass,
     required this.roomId,
     required this.lecturerId,
     required this.lecturerName,
@@ -43,6 +47,8 @@ class ClassSlotModel {
     return ClassSlotModel(
       id:           doc.id,
       subjectName:  d['subjectName']  as String? ?? '',
+      subjectCode:  d['subjectCode']  as String? ?? '',
+      studentClass: d['studentClass'] as String? ?? '',
       roomId:       d['roomId']       as String? ?? '',
       lecturerId:   d['lecturerId']   as String? ?? '',
       lecturerName: d['lecturerName'] as String? ?? '',
@@ -56,6 +62,8 @@ class ClassSlotModel {
   /// Serialise this model for Firestore storage.
   Map<String, dynamic> toFirestore() => {
     'subjectName':  subjectName,
+    'subjectCode':  subjectCode,
+    'studentClass': studentClass,
     'roomId':       roomId,
     'lecturerId':   lecturerId,
     'lecturerName': lecturerName,

@@ -6,11 +6,10 @@ import '../../models/class_slot_model.dart';
 import '../../theme.dart';
 import '../../services/auth_service.dart';
 import '../../models/user.dart';
+import 'ambil_kehadiran_screen.dart';
 
 class MyTimetableScreen extends ConsumerWidget {
-  final Function(String slotId) onTakeAttendance;
-
-  const MyTimetableScreen({super.key, required this.onTakeAttendance});
+  const MyTimetableScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -94,7 +93,6 @@ class MyTimetableScreen extends ConsumerWidget {
                         children: slots
                             .map((slot) => _TimetableCard(
                                   slot: slot,
-                                  onTakeAttendance: onTakeAttendance,
                                 ))
                             .toList(),
                       ),
@@ -112,9 +110,8 @@ class MyTimetableScreen extends ConsumerWidget {
 
 class _TimetableCard extends StatelessWidget {
   final ClassSlotModel slot;
-  final Function(String slotId) onTakeAttendance;
 
-  const _TimetableCard({required this.slot, required this.onTakeAttendance});
+  const _TimetableCard({required this.slot});
 
   @override
   Widget build(BuildContext context) {
@@ -193,14 +190,26 @@ class _TimetableCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          const Icon(Icons.school_rounded,
-                              size: 16, color: Color(0xFF10B981)), // Emerald book/program
+                          const Icon(Icons.group_rounded,
+                              size: 16, color: Color(0xFF6366F1)), // Indigo group
                           const SizedBox(width: 4),
-                          Text('Program: ${slot.program}',
+                          Text(slot.studentClass.isNotEmpty ? slot.studentClass : 'Kelas Gantian',
                               style: const TextStyle(
                                   color: EHadirTheme.textSecondary,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500)),
+                          const SizedBox(width: 14),
+                          const Icon(Icons.school_rounded,
+                              size: 16, color: Color(0xFF10B981)), // Emerald book/program
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(slot.program,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: EHadirTheme.textSecondary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500)),
+                          ),
                         ],
                       ),
                     ],
@@ -224,7 +233,20 @@ class _TimetableCard extends StatelessWidget {
               children: [
                 ElevatedButton.icon(
                   onPressed: () {
-                    onTakeAttendance(slot.id);
+                    // Navigate directly to attendance screen using slot data.
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AmbilKehadiranScreen(
+                          subjectCode:  slot.subjectCode.isNotEmpty
+                              ? slot.subjectCode
+                              : slot.subjectName,
+                          subjectName:  slot.subjectName,
+                          studentClass: slot.studentClass,
+                          program:      slot.program,
+                        ),
+                      ),
+                    );
                   },
                   icon: const Icon(Icons.fact_check_rounded, size: 16, color: Colors.white),
                   label: const Text('Ambil Kehadiran'),
