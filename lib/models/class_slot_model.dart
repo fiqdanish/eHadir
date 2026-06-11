@@ -13,6 +13,7 @@ class ClassSlotModel {
   final DateTime date;
   final TimeOfDay startTime;
   final TimeOfDay endTime;
+  final String bookingRef;     // Firestore ID of the linked `bookings` doc
 
   ClassSlotModel({
     required this.id,
@@ -26,6 +27,7 @@ class ClassSlotModel {
     required this.date,
     required this.startTime,
     required this.endTime,
+    this.bookingRef = '',
   });
 
   int get startMinutes => startTime.hour * 60 + startTime.minute;
@@ -56,6 +58,7 @@ class ClassSlotModel {
       date: (d['date'] as Timestamp).toDate(),
       startTime: TimeOfDay(hour: startMin ~/ 60, minute: startMin % 60),
       endTime:   TimeOfDay(hour: endMin   ~/ 60, minute: endMin   % 60),
+      bookingRef:   d['bookingRef']   as String? ?? '',
     );
   }
 

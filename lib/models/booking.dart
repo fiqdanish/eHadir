@@ -11,7 +11,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///   - `date`        : Firestore Timestamp (normalised to midnight)
 ///   - `startTime`   : int — minutes from midnight (e.g. 09:00 = 540)
 ///   - `endTime`     : int — minutes from midnight (e.g. 11:00 = 660)
-///   - `endTime`     : int — minutes from midnight (e.g. 11:00 = 660)
 ///   - `subjectCode` : Subject code (e.g. "SECJ1013")
 ///   - `studentClass`: Student class/group (e.g. "DED 1A")
 ///   - `program`     : Program name (e.g. "DCP — Diploma Kompetensi Elektrik (Kuasa)")

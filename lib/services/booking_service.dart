@@ -153,6 +153,33 @@ class FirestoreBookingService extends ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════
+  //  DELETE BOOKING (Cancellation)
+  // ═══════════════════════════════════════════════════════════
+
+  /// Atomically removes a booking from BOTH `bookings` AND `classSlots`
+  /// collections so the Jadual Mingguan grid and Jadual Saya card list
+  /// both update in real-time.
+  ///
+  /// [bookingId]   — the document ID in the `bookings` collection.
+  /// [classSlotId] — the document ID in the `classSlots` collection.
+  Future<void> deleteBooking({
+    required String bookingId,
+    required String classSlotId,
+  }) async {
+    final batch = _db.batch();
+
+    if (bookingId.isNotEmpty) {
+      batch.delete(_db.collection(_collection).doc(bookingId));
+    }
+    if (classSlotId.isNotEmpty) {
+      batch.delete(_db.collection(_classSlots).doc(classSlotId));
+    }
+
+    await batch.commit();
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════
   //  READ BOOKINGS
   // ═══════════════════════════════════════════════════════════
 
@@ -294,7 +321,29 @@ class FirestoreBookingService extends ChangeNotifier {
           addOccupied(room, start, end);
         }
 
+        // ── Also include in-memory master timetable (recurring weekly) ──
+        // The mock DB uses dayOfWeek (1=Mon..5=Fri) to store recurring slots.
+        for (final t in mockDb.masterTimetable) {
+          if (t.dayOfWeek == date.weekday) {
+            final start = t.startTime.hour * 60 + t.startTime.minute;
+            final end   = t.endTime.hour   * 60 + t.endTime.minute;
+            addOccupied(t.room, start, end);
+          }
+        }
+
+        // ── Also include in-memory classSlots (same exact date) ──
+        for (final s in mockDb.classSlots) {
+          if (s.date.year  == date.year  &&
+              s.date.month == date.month &&
+              s.date.day   == date.day) {
+            final start = s.startTime.hour * 60 + s.startTime.minute;
+            final end   = s.endTime.hour   * 60 + s.endTime.minute;
+            addOccupied(s.roomId, start, end);
+          }
+        }
+
         return matrix;
+
       });
     });
   }

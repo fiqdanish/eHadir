@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../services/booking_service.dart';
@@ -650,19 +651,29 @@ class _CreateBookingScreenState extends ConsumerState<CreateBookingScreen>
                   borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
                   border: Border.all(color: EHadirTheme.divider),
                 ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ── Header row: period labels ──
-                      _buildGridHeader(),
-                      // ── Room rows ──
-                      ...allRooms.map((room) => _buildRoomRow(
-                            room,
-                            occupiedMap[room.name] ?? const <int>{},
-                          )),
-                    ],
+                // ShaderMask fades right edge to hint at horizontal scrollability
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [Colors.white, Colors.white, Colors.transparent],
+                    stops: [0.0, 0.82, 1.0],
+                  ).createShader(bounds),
+                  blendMode: BlendMode.dstIn,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── Header row: period labels ──
+                        _buildGridHeader(),
+                        // ── Room rows ──
+                        ...allRooms.map((room) => _buildRoomRow(
+                              room,
+                              occupiedMap[room.name] ?? const <int>{},
+                            )),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -803,15 +814,16 @@ class _CreateBookingScreenState extends ConsumerState<CreateBookingScreen>
             ],
           ),
         ),
-        // Period cells
+        // Period cells — pass occupiedPeriods so tap logic can validate ranges
         for (final p in Period.all)
-          _buildCell(room.name, p.index, occupiedPeriods.contains(p.index)),
+          _buildCell(room.name, p.index, occupiedPeriods.contains(p.index), occupiedPeriods),
       ],
     );
   }
 
   // ─── Individual grid cell ───────────────────────────────
-  Widget _buildCell(String roomName, int period, bool isOccupied) {
+  Widget _buildCell(
+      String roomName, int period, bool isOccupied, Set<int> roomOccupied) {
     final isSelected =
         _selectedRoom == roomName && _selectedPeriods.contains(period);
 
@@ -839,7 +851,9 @@ class _CreateBookingScreenState extends ConsumerState<CreateBookingScreen>
     }
 
     return GestureDetector(
-      onTap: isOccupied ? null : () => _onCellTapped(roomName, period, isOccupied),
+      onTap: isOccupied
+          ? null
+          : () => _onCellTapped(roomName, period, roomOccupied),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         width: _kCellW,
@@ -857,9 +871,8 @@ class _CreateBookingScreenState extends ConsumerState<CreateBookingScreen>
   }
 
   /// Handle cell tap: select a contiguous range in the same room row.
-  void _onCellTapped(String roomName, int period, bool isOccupied) {
-    if (isOccupied) return;
-
+  /// Validates that NO occupied period falls within the proposed range.
+  void _onCellTapped(String roomName, int period, Set<int> roomOccupied) {
     setState(() {
       if (_selectedRoom != roomName) {
         // Switching rooms → reset selection to just this cell
@@ -872,12 +885,38 @@ class _CreateBookingScreenState extends ConsumerState<CreateBookingScreen>
           _selectedRoom = null;
         }
       } else {
-        // Extend selection: build contiguous range from existing
+        // Extend selection: build contiguous range from existing + new period
         final allSelected = {..._selectedPeriods, period};
         final minP = allSelected.reduce((a, b) => a < b ? a : b);
         final maxP = allSelected.reduce((a, b) => a > b ? a : b);
-        // Fill the range to keep it contiguous
-        _selectedPeriods = {for (int i = minP; i <= maxP; i++) i};
+        final proposedRange = {for (int i = minP; i <= maxP; i++) i};
+
+        // Guard: ensure NO occupied cell falls within the proposed range.
+        final hasConflictInRange =
+            proposedRange.any((p) => roomOccupied.contains(p));
+
+        if (hasConflictInRange) {
+          // Blocked — just select the single tapped cell instead.
+          _selectedRoom = roomName;
+          _selectedPeriods = {period};
+          // Show a brief in-context message via a snackbar
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Julat ini mengandungi slot yang penuh. Pilihan dihadkan ke slot ini sahaja.',
+                  ),
+                  duration: Duration(seconds: 3),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          });
+        } else {
+          // Safe — select the full contiguous range
+          _selectedPeriods = proposedRange;
+        }
       }
     });
   }
