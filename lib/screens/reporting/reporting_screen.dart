@@ -497,8 +497,11 @@ class _KetuaJabatanReport extends ConsumerWidget {
     final reporting = ref.watch(reportingServiceProvider);
     final discipline = ref.watch(disciplineServiceProvider);
 
+    // KJ oversees the entire department (multiple programs), so the
+    // stats view must match the KJ action screen scope — show every
+    // report regardless of program. Mirrors LaporanDisiplinKjScreen.
     return StreamBuilder<List<DisciplineReportModel>>(
-      stream: discipline.streamByProgram(user.program),
+      stream: discipline.streamAll(),
       builder: (ctx, repSnap) {
         final reports = repSnap.data ?? const <DisciplineReportModel>[];
         return ListView(

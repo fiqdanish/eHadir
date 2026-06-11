@@ -4,9 +4,13 @@ import '../../theme.dart';
 import '../lecturer/sejarah_disiplin_screen.dart';
 import 'reporting_screen.dart';
 
-/// The bottom-nav "Laporan" hub. Two segments:
+/// The bottom-nav "Laporan" hub — Pensyarah-only.
+/// KP / KJ / Admin / TPA see [ReportingScreen] directly (routed in
+/// [AppShell._buildScreens]) since reviewer roles don't file reports.
+///
+/// Two segments:
 ///   • Statistik  → Module 3 (Reporting Module)
-///   • Lapor      → Module 2 (Discipline reporting form)
+///   • Lapor      → Module 2 (Discipline reporting form + history)
 class LaporanHubScreen extends StatefulWidget {
   /// 0 → Statistik, 1 → Lapor Disiplin.
   final int initialTab;

@@ -15,6 +15,7 @@ import 'lecturer/ambil_kehadiran_screen.dart';
 import 'lecturer/weekly_timetable_screen.dart';
 import 'profile/profile_screen.dart';
 import 'reporting/laporan_hub_screen.dart';
+import 'reporting/reporting_screen.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   final AppUser currentUser;
@@ -78,10 +79,20 @@ class AppShellState extends ConsumerState<AppShell> {
         key: ValueKey(_attendanceSlotId ?? 'attendance-tab'),
         initialSlotId: _attendanceSlotId,
       ), // Kehadiran
-      LaporanHubScreen(
-        key: ValueKey('laporan-$_laporanTab'),
-        initialTab: _laporanTab,
-      ), // Module 3 (Statistik) + Module 2 (Lapor Disiplin)
+      // Tab 3 — Laporan
+      //   Pensyarah → hub with both Statistik (M3) and Lapor Disiplin (M2 submit)
+      //   KP / KJ / Admin / TPA → ReportingScreen only (no submit form;
+      //     reviewer roles don't file reports — they use their dashboard
+      //     cards to open the review / action screens).
+      widget.currentUser.role == UserRole.pensyarah
+          ? LaporanHubScreen(
+              key: ValueKey('laporan-$_laporanTab'),
+              initialTab: _laporanTab,
+            )
+          : Scaffold(
+              appBar: AppBar(title: const Text('Laporan')),
+              body: const ReportingScreen(),
+            ),
       const ProfileScreen(), // Profil
     ];
   }
