@@ -111,7 +111,7 @@ class _PensyarahReportState extends ConsumerState<_PensyarahReport> {
               studentClass: sel.studentClass,
             ),
             const SizedBox(height: 16),
-            _SectionTitle('Pelajar Berisiko (< 80%)'),
+            _SectionTitle('Pelajar Berisiko'),
             const SizedBox(height: 8),
             _AtRiskCard(assignment: sel),
           ],
@@ -296,35 +296,39 @@ class _WeeklyTrendCard extends ConsumerWidget {
   }
 }
 
-class _AtRiskCard extends ConsumerWidget {
+class _AtRiskCard extends ConsumerStatefulWidget {
   final LecturerAssignment assignment;
   const _AtRiskCard({required this.assignment});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AtRiskCard> createState() => _AtRiskCardState();
+}
+
+class _AtRiskCardState extends ConsumerState<_AtRiskCard> {
+  /// Current cutoff: students with pct strictly below this show in the list.
+  double _threshold = 80;
+
+  @override
+  Widget build(BuildContext context) {
     final db = ref.watch(mockDbProvider);
     final reporting = ref.watch(reportingServiceProvider);
-    final students = db.getStudentsForClass(assignment.studentClass,
-        program: assignment.program);
+    final students = db.getStudentsForClass(widget.assignment.studentClass,
+        program: widget.assignment.program);
     final nameMap = {for (final s in students) s.id: s.name};
 
     return StreamBuilder<List<AtRiskStudent>>(
-      stream: reporting.classAtRiskStudents(
-        subjectCode: assignment.subjectCode,
-        studentClass: assignment.studentClass,
+      stream: reporting.classStudentPercentages(
+        subjectCode: widget.assignment.subjectCode,
+        studentClass: widget.assignment.studentClass,
         studentNames: nameMap,
       ),
       builder: (ctx, snap) {
-        final list = snap.data ?? const <AtRiskStudent>[];
-        if (list.isEmpty) {
-          return _InfoCard(
-            color: EHadirTheme.approved,
-            icon: Icons.check_circle_rounded,
-            text:
-                'Tiada pelajar di bawah 80%. Teruskan menggalakkan kehadiran!',
-          );
-        }
-        return _AtRiskList(items: list);
+        final all = snap.data ?? const <AtRiskStudent>[];
+        return _TieredAtRiskBody(
+          all: all,
+          threshold: _threshold,
+          onThresholdChanged: (t) => setState(() => _threshold = t),
+        );
       },
     );
   }
@@ -398,25 +402,9 @@ class _KetuaProgramReport extends ConsumerWidget {
             const SizedBox(height: 8),
             _DisciplineBreakdownSection(reports: reports),
             const SizedBox(height: 16),
-            _SectionTitle('Pelajar Berisiko (< 80%)'),
+            _SectionTitle('Pelajar Berisiko'),
             const SizedBox(height: 8),
-            StreamBuilder<List<AtRiskStudent>>(
-              stream: reporting.programAtRiskStudents(
-                program: user.program,
-                studentNames: nameMap,
-              ),
-              builder: (ctx, snap) {
-                final list = snap.data ?? const <AtRiskStudent>[];
-                if (list.isEmpty) {
-                  return _InfoCard(
-                    color: EHadirTheme.approved,
-                    icon: Icons.check_circle_rounded,
-                    text: 'Tiada pelajar di bawah 80% dalam program ini.',
-                  );
-                }
-                return _AtRiskList(items: list);
-              },
-            ),
+            _ProgramAtRiskCard(program: user.program, studentNames: nameMap),
           ],
         );
       },
@@ -1939,6 +1927,194 @@ class _Legend extends StatelessWidget {
   }
 }
 
+/// Program-wide at-risk card with the same tier-chip behaviour as
+/// [_AtRiskCard], but fed by the program-scoped stream.
+class _ProgramAtRiskCard extends ConsumerStatefulWidget {
+  final String program;
+  final Map<String, String> studentNames;
+  const _ProgramAtRiskCard({
+    required this.program,
+    required this.studentNames,
+  });
+
+  @override
+  ConsumerState<_ProgramAtRiskCard> createState() =>
+      _ProgramAtRiskCardState();
+}
+
+class _ProgramAtRiskCardState extends ConsumerState<_ProgramAtRiskCard> {
+  double _threshold = 80;
+
+  @override
+  Widget build(BuildContext context) {
+    final reporting = ref.watch(reportingServiceProvider);
+    return StreamBuilder<List<AtRiskStudent>>(
+      stream: reporting.programStudentPercentages(
+        program: widget.program,
+        studentNames: widget.studentNames,
+      ),
+      builder: (ctx, snap) {
+        final all = snap.data ?? const <AtRiskStudent>[];
+        return _TieredAtRiskBody(
+          all: all,
+          threshold: _threshold,
+          onThresholdChanged: (t) => setState(() => _threshold = t),
+        );
+      },
+    );
+  }
+}
+
+/// Shared body for both Pensyarah ([_AtRiskCard]) and KP ([_ProgramAtRiskCard])
+/// at-risk sections. Renders the three-tier chip row (with counts) and the
+/// filtered student list below.
+class _TieredAtRiskBody extends StatelessWidget {
+  /// All marked students with their %, sorted ascending.
+  final List<AtRiskStudent> all;
+  final double threshold;
+  final ValueChanged<double> onThresholdChanged;
+
+  const _TieredAtRiskBody({
+    required this.all,
+    required this.threshold,
+    required this.onThresholdChanged,
+  });
+
+  // Three tier cutoffs, strict less-than. Counts are cumulative —
+  // "<95%" includes everyone below 90% and below 80% too.
+  static const _tiers = [95.0, 90.0, 80.0];
+
+  @override
+  Widget build(BuildContext context) {
+    final counts = {
+      for (final t in _tiers) t: all.where((s) => s.percentage < t).length,
+    };
+    final filtered = all.where((s) => s.percentage < threshold).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ThresholdChips(
+          selected: threshold,
+          counts: counts,
+          onChanged: onThresholdChanged,
+        ),
+        const SizedBox(height: 10),
+        if (filtered.isEmpty)
+          _InfoCard(
+            color: EHadirTheme.approved,
+            icon: Icons.check_circle_rounded,
+            text: 'Tiada pelajar di bawah ${threshold.toInt()}%.',
+          )
+        else
+          _AtRiskList(items: filtered),
+      ],
+    );
+  }
+}
+
+class _ThresholdChips extends StatelessWidget {
+  final double selected;
+  final Map<double, int> counts; // tier (e.g. 95.0) → count below it
+  final ValueChanged<double> onChanged;
+  const _ThresholdChips({
+    required this.selected,
+    required this.counts,
+    required this.onChanged,
+  });
+
+  /// Per-tier accent. Stricter tier = more alarming colour.
+  Color _accentFor(double tier) {
+    if (tier <= 80) return EHadirTheme.rejected;
+    if (tier <= 90) return EHadirTheme.pending;
+    return const Color(0xFFFB923C); // softer orange for <95%
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tiers = counts.keys.toList()..sort((a, b) => b.compareTo(a));
+    return Row(
+      children: [
+        for (int i = 0; i < tiers.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: _Chip(
+              label: '< ${tiers[i].toInt()}%',
+              count: counts[tiers[i]] ?? 0,
+              selected: selected == tiers[i],
+              accent: _accentFor(tiers[i]),
+              onTap: () => onChanged(tiers[i]),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+  const _Chip({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: selected ? accent.withValues(alpha: 0.15) : EHadirTheme.card,
+          borderRadius: BorderRadius.circular(EHadirTheme.radiusSm),
+          border: Border.all(
+            color: selected ? accent : EHadirTheme.divider,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label,
+                style: TextStyle(
+                  color: selected ? accent : EHadirTheme.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                )),
+            const SizedBox(width: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: selected ? accent : EHadirTheme.surfaceLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: selected ? Colors.white : EHadirTheme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AtRiskList extends StatelessWidget {
   final List<AtRiskStudent> items;
   const _AtRiskList({required this.items});
@@ -1971,8 +2147,15 @@ class _AtRiskRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pct = item.percentage;
-    final color =
-        pct < 50 ? EHadirTheme.rejected : EHadirTheme.pending;
+    // Three-tier accent — matches the chip colours above.
+    final Color color;
+    if (pct < 80) {
+      color = EHadirTheme.rejected;            // red — serious
+    } else if (pct < 90) {
+      color = EHadirTheme.pending;             // amber — warning
+    } else {
+      color = const Color(0xFFFB923C);         // soft orange — early signal
+    }
     // Only Pensyarah may file a discipline report, so the "Lapor" shortcut
     // is gated to their role. KP / KJ just see the row as a read-only flag.
     final isPensyarah =
