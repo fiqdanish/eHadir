@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../services/mock_db_service.dart';
+import '../../services/discipline_service.dart';
 import '../../models/discipline_report_model.dart';
 import '../../theme.dart';
 import '../../utils/dialogs.dart';
@@ -11,9 +11,19 @@ class TPADashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(mockDbProvider);
-    final reports = db.allDisciplineReports; // TPA sees all programs
+    final discipline = ref.watch(disciplineServiceProvider);
 
+    return StreamBuilder<List<DisciplineReportModel>>(
+      stream: discipline.streamAll(),
+      builder: (ctx, snap) {
+        final reports = snap.data ?? const <DisciplineReportModel>[];
+        return _buildScaffold(context, ref, reports);
+      },
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, WidgetRef ref,
+      List<DisciplineReportModel> reports) {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(

@@ -10,6 +10,7 @@ import '../../models/user.dart';
 import '../../services/attendance_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/curriculum_service.dart';
+import '../../services/discipline_service.dart';
 import '../../services/mock_db_service.dart';
 import '../../services/reporting_service.dart';
 import '../../theme.dart';
@@ -339,78 +340,85 @@ class _KetuaProgramReport extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reporting = ref.watch(reportingServiceProvider);
+    final discipline = ref.watch(disciplineServiceProvider);
     final db = ref.watch(mockDbProvider);
     final students = db.getStudentsForProgram(user.program);
     final nameMap = {for (final s in students) s.id: s.name};
-    final reports = db.getReportsForProgram(user.program);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      children: [
-        _HeroHeader(
-          title: 'Statistik Program',
-          subtitle: user.program,
-          icon: Icons.school_rounded,
-        ),
-        const SizedBox(height: 16),
-        _ProgramKpiRow(program: user.program, disciplineCount: reports.length),
-        const SizedBox(height: 16),
-        _SectionTitle('Purata Kehadiran Mengikut Kelas'),
-        const SizedBox(height: 8),
-        _ChartCard(
-          child: StreamBuilder<Map<String, double>>(
-            stream: reporting.programPercentageByClass(user.program),
-            builder: (ctx, snap) {
-              final data = snap.data ?? const {};
-              if (data.isEmpty) {
-                return const _EmptyChart(
-                    text: 'Belum ada data kehadiran untuk program ini.');
-              }
-              return _BarBreakdownChart(data: data);
-            },
-          ),
-        ),
-        const SizedBox(height: 16),
-        _SectionTitle('Trend Mingguan Program'),
-        const SizedBox(height: 8),
-        _ChartCard(
-          child: StreamBuilder<List<double>>(
-            stream: reporting.programWeeklyTrend(user.program),
-            builder: (ctx, snap) {
-              final data = snap.data ?? const <double>[];
-              if (data.every((d) => d == 0)) {
-                return const _EmptyChart(
-                    text: 'Belum ada trend mingguan untuk dipaparkan.');
-              }
-              return _LineTrendChart(values: data);
-            },
-          ),
-        ),
-        const SizedBox(height: 16),
-        _SectionTitle('Laporan Disiplin'),
-        const SizedBox(height: 8),
-        _DisciplineBreakdownSection(reports: reports),
-        const SizedBox(height: 16),
-        _SectionTitle('Pelajar Berisiko (< 80%)'),
-        const SizedBox(height: 8),
-        StreamBuilder<List<AtRiskStudent>>(
-          stream: reporting.programAtRiskStudents(
-            program: user.program,
-            studentNames: nameMap,
-          ),
-          builder: (ctx, snap) {
-            final list = snap.data ?? const <AtRiskStudent>[];
-            if (list.isEmpty) {
-              return _InfoCard(
-                color: EHadirTheme.approved,
-                icon: Icons.check_circle_rounded,
-                text: 'Tiada pelajar di bawah 80% dalam program ini.',
-              );
-            }
-            return _AtRiskList(items: list);
-          },
-        ),
-      ],
+    return StreamBuilder<List<DisciplineReportModel>>(
+      stream: discipline.streamByProgram(user.program),
+      builder: (ctx, repSnap) {
+        final reports = repSnap.data ?? const <DisciplineReportModel>[];
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          children: [
+            _HeroHeader(
+              title: 'Statistik Program',
+              subtitle: user.program,
+              icon: Icons.school_rounded,
+            ),
+            const SizedBox(height: 16),
+            _ProgramKpiRow(
+                program: user.program, disciplineCount: reports.length),
+            const SizedBox(height: 16),
+            _SectionTitle('Purata Kehadiran Mengikut Kelas'),
+            const SizedBox(height: 8),
+            _ChartCard(
+              child: StreamBuilder<Map<String, double>>(
+                stream: reporting.programPercentageByClass(user.program),
+                builder: (ctx, snap) {
+                  final data = snap.data ?? const {};
+                  if (data.isEmpty) {
+                    return const _EmptyChart(
+                        text: 'Belum ada data kehadiran untuk program ini.');
+                  }
+                  return _BarBreakdownChart(data: data);
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SectionTitle('Trend Mingguan Program'),
+            const SizedBox(height: 8),
+            _ChartCard(
+              child: StreamBuilder<List<double>>(
+                stream: reporting.programWeeklyTrend(user.program),
+                builder: (ctx, snap) {
+                  final data = snap.data ?? const <double>[];
+                  if (data.every((d) => d == 0)) {
+                    return const _EmptyChart(
+                        text: 'Belum ada trend mingguan untuk dipaparkan.');
+                  }
+                  return _LineTrendChart(values: data);
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SectionTitle('Laporan Disiplin'),
+            const SizedBox(height: 8),
+            _DisciplineBreakdownSection(reports: reports),
+            const SizedBox(height: 16),
+            _SectionTitle('Pelajar Berisiko (< 80%)'),
+            const SizedBox(height: 8),
+            StreamBuilder<List<AtRiskStudent>>(
+              stream: reporting.programAtRiskStudents(
+                program: user.program,
+                studentNames: nameMap,
+              ),
+              builder: (ctx, snap) {
+                final list = snap.data ?? const <AtRiskStudent>[];
+                if (list.isEmpty) {
+                  return _InfoCard(
+                    color: EHadirTheme.approved,
+                    icon: Icons.check_circle_rounded,
+                    text: 'Tiada pelajar di bawah 80% dalam program ini.',
+                  );
+                }
+                return _AtRiskList(items: list);
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -487,49 +495,55 @@ class _KetuaJabatanReport extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reporting = ref.watch(reportingServiceProvider);
-    final db = ref.watch(mockDbProvider);
-    final reports = db.getReportsForProgram(user.program);
+    final discipline = ref.watch(disciplineServiceProvider);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      children: [
-        _HeroHeader(
-          title: 'Statistik Jabatan',
-          subtitle: user.program,
-          icon: Icons.corporate_fare_rounded,
-          gradient: const LinearGradient(
-            colors: [Color(0xFFE64A19), Color(0xFFFF7043)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        const SizedBox(height: 16),
-        _ProgramKpiRow(program: user.program, disciplineCount: reports.length),
-        const SizedBox(height: 16),
-        _SectionTitle('Prestasi Pensyarah'),
-        const SizedBox(height: 8),
-        _LecturerPerformanceCard(program: user.program),
-        const SizedBox(height: 16),
-        _SectionTitle('Trend Mingguan Program'),
-        const SizedBox(height: 8),
-        _ChartCard(
-          child: StreamBuilder<List<double>>(
-            stream: reporting.programWeeklyTrend(user.program),
-            builder: (ctx, snap) {
-              final data = snap.data ?? const <double>[];
-              if (data.every((d) => d == 0)) {
-                return const _EmptyChart(
-                    text: 'Belum ada trend mingguan untuk dipaparkan.');
-              }
-              return _LineTrendChart(values: data);
-            },
-          ),
-        ),
-        const SizedBox(height: 16),
-        _SectionTitle('Laporan Disiplin'),
-        const SizedBox(height: 8),
-        _DisciplineBreakdownSection(reports: reports),
-      ],
+    return StreamBuilder<List<DisciplineReportModel>>(
+      stream: discipline.streamByProgram(user.program),
+      builder: (ctx, repSnap) {
+        final reports = repSnap.data ?? const <DisciplineReportModel>[];
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          children: [
+            _HeroHeader(
+              title: 'Statistik Jabatan',
+              subtitle: user.program,
+              icon: Icons.corporate_fare_rounded,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFE64A19), Color(0xFFFF7043)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _ProgramKpiRow(
+                program: user.program, disciplineCount: reports.length),
+            const SizedBox(height: 16),
+            _SectionTitle('Prestasi Pensyarah'),
+            const SizedBox(height: 8),
+            _LecturerPerformanceCard(program: user.program),
+            const SizedBox(height: 16),
+            _SectionTitle('Trend Mingguan Program'),
+            const SizedBox(height: 8),
+            _ChartCard(
+              child: StreamBuilder<List<double>>(
+                stream: reporting.programWeeklyTrend(user.program),
+                builder: (ctx, snap) {
+                  final data = snap.data ?? const <double>[];
+                  if (data.every((d) => d == 0)) {
+                    return const _EmptyChart(
+                        text: 'Belum ada trend mingguan untuk dipaparkan.');
+                  }
+                  return _LineTrendChart(values: data);
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SectionTitle('Laporan Disiplin'),
+            const SizedBox(height: 8),
+            _DisciplineBreakdownSection(reports: reports),
+          ],
+        );
+      },
     );
   }
 }
@@ -646,43 +660,49 @@ class _TPAReport extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reporting = ref.watch(reportingServiceProvider);
-    final db = ref.watch(mockDbProvider);
-    final allReports = db.allDisciplineReports;
+    final discipline = ref.watch(disciplineServiceProvider);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      children: [
-        _HeroHeader(
-          title: 'Pemantauan Global',
-          subtitle: 'Semua Program · ${allReports.length} laporan disiplin',
-          icon: Icons.stars_rounded,
-          gradient: const LinearGradient(
-            colors: [Color(0xFFF57F17), Color(0xFFFFD54F)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        const SizedBox(height: 16),
-        _SectionTitle('Purata Kehadiran Mengikut Program'),
-        const SizedBox(height: 8),
-        _ChartCard(
-          child: StreamBuilder<Map<String, double>>(
-            stream: reporting.percentageByProgram(),
-            builder: (ctx, snap) {
-              final data = snap.data ?? const {};
-              if (data.isEmpty) {
-                return const _EmptyChart(
-                    text: 'Belum ada data merentas program.');
-              }
-              return _BarBreakdownChart(data: data, abbreviate: true);
-            },
-          ),
-        ),
-        const SizedBox(height: 16),
-        _SectionTitle('Pecahan Laporan Disiplin (Semua Program)'),
-        const SizedBox(height: 8),
-        _DisciplineDonutCard(reports: allReports),
-      ],
+    return StreamBuilder<List<DisciplineReportModel>>(
+      stream: discipline.streamAll(),
+      builder: (ctx, repSnap) {
+        final allReports = repSnap.data ?? const <DisciplineReportModel>[];
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          children: [
+            _HeroHeader(
+              title: 'Pemantauan Global',
+              subtitle:
+                  'Semua Program · ${allReports.length} laporan disiplin',
+              icon: Icons.stars_rounded,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF57F17), Color(0xFFFFD54F)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SectionTitle('Purata Kehadiran Mengikut Program'),
+            const SizedBox(height: 8),
+            _ChartCard(
+              child: StreamBuilder<Map<String, double>>(
+                stream: reporting.percentageByProgram(),
+                builder: (ctx, snap) {
+                  final data = snap.data ?? const {};
+                  if (data.isEmpty) {
+                    return const _EmptyChart(
+                        text: 'Belum ada data merentas program.');
+                  }
+                  return _BarBreakdownChart(data: data, abbreviate: true);
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SectionTitle('Pecahan Laporan Disiplin (Semua Program)'),
+            const SizedBox(height: 8),
+            _DisciplineDonutCard(reports: allReports),
+          ],
+        );
+      },
     );
   }
 }

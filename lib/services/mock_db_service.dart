@@ -7,7 +7,6 @@ import '../models/timetable.dart';
 import '../models/room.dart';
 import '../models/notification.dart';
 import '../models/class_slot_model.dart';
-import '../models/discipline_report_model.dart';
 import 'seed_data.dart';
 
 /// In-memory data service for timetables, attendance, bookings,
@@ -23,7 +22,6 @@ class MockDatabaseService extends ChangeNotifier {
   List<Timetable> masterTimetable = [];
   List<AppNotification> notifications = [];
   List<ClassSlotModel> classSlots = [];
-  List<DisciplineReportModel> disciplineReports = [];
 
   MockDatabaseService() {
     _seedData();
@@ -329,28 +327,7 @@ class MockDatabaseService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ═══════════════════════════════════════════════════════════
-  //  DISCIPLINE REPORTS
-  // ═══════════════════════════════════════════════════════════
-
-  void submitDisciplineReport(DisciplineReportModel report) {
-    disciplineReports.add(report);
-    notifyListeners();
-  }
-
-  /// Reports visible only to same-program Ketua Program & Ketua Jabatan
-  List<DisciplineReportModel> getReportsForProgram(String program) {
-    return disciplineReports
-        .where((r) => r.program == program)
-        .toList()
-      ..sort((a, b) => b.reportedAt.compareTo(a.reportedAt));
-  }
-
-  /// All reports (for TPA view)
-  List<DisciplineReportModel> get allDisciplineReports {
-    return List.from(disciplineReports)
-      ..sort((a, b) => b.reportedAt.compareTo(a.reportedAt));
-  }
+  // Discipline reports moved to Firestore — see DisciplineService.
 
   // ═══════════════════════════════════════════════════════════
   //  BOOKING MODULE (Module 6) — Now handled by Firestore.
