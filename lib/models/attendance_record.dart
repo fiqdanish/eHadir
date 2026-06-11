@@ -97,13 +97,18 @@ class ClassAttendance {
     return AttendanceStatusX.fromCode(list[week]);
   }
 
+  /// Attendance % using a 100%-down model: everyone starts at 100% and each
+  /// `T` (Tidak Hadir) deducts `1 / weeksPerSemester`. MC and CK are excused
+  /// and don't deduct; blank weeks (not yet taken) don't deduct either.
+  ///
+  /// This matches the absenteeism warning engine (which also keys off T only)
+  /// and the Malaysian polytechnic 80% rule for unexcused absences.
   double percentageFor(String studentId) {
     final list = weeks[studentId];
-    if (list == null || list.isEmpty) return 0.0;
-    final taken = list.where((s) => s.isNotEmpty).length;
-    if (taken == 0) return 0.0;
-    final present = list.where((s) => s == 'H').length;
-    return (present / taken) * 100;
+    if (list == null || list.isEmpty) return 100.0;
+    final absent = list.where((s) => s == 'T').length;
+    final pct = (1 - absent / weeksPerSemester) * 100;
+    return pct.clamp(0.0, 100.0);
   }
 
   ClassAttendance withCell(String studentId, int week, AttendanceStatus s) {

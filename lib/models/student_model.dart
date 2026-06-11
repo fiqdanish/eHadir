@@ -17,13 +17,15 @@ class StudentModel {
     Map<String, List<String>>? attendanceBySubject,
   }) : attendanceBySubject = attendanceBySubject ?? {};
 
+  /// Same 100%-down model as [ClassAttendance.percentageFor]: start at 100%,
+  /// each `T` deducts 1/14, MC/CK/blank don't deduct.
   double getAttendancePercentage(String subjectId) {
     final weeks = attendanceBySubject[subjectId];
-    if (weeks == null || weeks.isEmpty) return 0.0;
-    final taken = weeks.where((w) => w.isNotEmpty).length;
-    if (taken == 0) return 0.0;
-    final present = weeks.where((w) => w == 'H').length;
-    return (present / taken) * 100;
+    if (weeks == null || weeks.isEmpty) return 100.0;
+    const semesterWeeks = 14;
+    final absent = weeks.where((w) => w == 'T').length;
+    final pct = (1 - absent / semesterWeeks) * 100;
+    return pct.clamp(0.0, 100.0);
   }
 
   double get overallAttendancePercentage {
