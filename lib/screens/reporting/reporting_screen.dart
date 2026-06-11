@@ -14,6 +14,7 @@ import '../../services/discipline_service.dart';
 import '../../services/mock_db_service.dart';
 import '../../services/reporting_service.dart';
 import '../../theme.dart';
+import '../lecturer/lapor_disiplin_screen.dart';
 
 /// Module 3 — Reporting Module.
 ///
@@ -1963,15 +1964,20 @@ class _AtRiskList extends StatelessWidget {
   }
 }
 
-class _AtRiskRow extends StatelessWidget {
+class _AtRiskRow extends ConsumerWidget {
   final AtRiskStudent item;
   const _AtRiskRow({required this.item});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final pct = item.percentage;
     final color =
         pct < 50 ? EHadirTheme.rejected : EHadirTheme.pending;
+    // Only Pensyarah may file a discipline report, so the "Lapor" shortcut
+    // is gated to their role. KP / KJ just see the row as a read-only flag.
+    final isPensyarah =
+        ref.watch(authProvider).currentUser?.role == UserRole.pensyarah;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
@@ -2021,6 +2027,34 @@ class _AtRiskRow extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                     fontSize: 12)),
           ),
+          if (isPensyarah) ...[
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LaporDisiplinScreen(
+                    prefilledStudentId: item.studentId,
+                    prefilledStudentName: item.studentName,
+                    prefilledStudentClass: item.studentClass,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.gavel_rounded, size: 14),
+              label: const Text('Lapor'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: EHadirTheme.rejected,
+                side: BorderSide(
+                  color: EHadirTheme.rejected.withValues(alpha: 0.6),
+                ),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                minimumSize: const Size(0, 32),
+                textStyle: const TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
         ],
       ),
     );
