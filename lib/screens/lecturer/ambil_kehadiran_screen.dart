@@ -58,6 +58,9 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
     _subjectName = widget.subjectName;
     _studentClass = widget.studentClass;
     _program = widget.program;
+    // Open on (and highlight) the current teaching week — the only one the
+    // lecturer is allowed to edit.
+    _selectedWeek = Semester.currentWeek - 1; // 0-indexed (M1 = 0)
   }
 
   bool get _hasContext =>
@@ -178,6 +181,9 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
               lecturerName: user.name,
             );
 
+        // Only the current teaching week is editable (0-indexed; M1 = 0).
+        final int currentWeek = Semester.currentWeek - 1;
+
         return Column(
           children: [
             _ClassHeader(
@@ -198,8 +204,10 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
               selected: _selectedWeek,
               onChanged: (w) => setState(() => _selectedWeek = w),
               current: current,
+              currentWeek: currentWeek,
               studentCount: students.length,
             ),
+            _CurrentWeekBanner(week: currentWeek + 1),
             const SizedBox(height: 4),
             Expanded(
               child: students.isEmpty
@@ -208,6 +216,7 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
                       students: students,
                       attendance: current,
                       selectedWeek: _selectedWeek,
+                      currentWeek: currentWeek,
                       onCellChanged: (s, w, st) async {
                         await attendance.setWeekCell(
                           base: current,
@@ -350,11 +359,13 @@ class _WeekStrip extends StatelessWidget {
   final int selected;
   final ValueChanged<int> onChanged;
   final ClassAttendance current;
+  final int currentWeek;
   final int studentCount;
   const _WeekStrip({
     required this.selected,
     required this.onChanged,
     required this.current,
+    required this.currentWeek,
     required this.studentCount,
   });
 
@@ -368,6 +379,7 @@ class _WeekStrip extends StatelessWidget {
         itemCount: ClassAttendance.weeksPerSemester,
         itemBuilder: (ctx, i) {
           final isSelected = i == selected;
+          final isCurrent = i == currentWeek;
           int marked = 0;
           current.weeks.forEach((sid, list) {
             if (i < list.length && list[i].isNotEmpty) marked++;
@@ -386,9 +398,12 @@ class _WeekStrip extends StatelessWidget {
                     : EHadirTheme.surfaceLight,
                 borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
                 border: Border.all(
-                  color: isSelected
-                      ? EHadirTheme.primary
-                      : EHadirTheme.divider,
+                  color: isCurrent
+                      ? EHadirTheme.approved
+                      : isSelected
+                          ? EHadirTheme.primary
+                          : EHadirTheme.divider,
+                  width: isCurrent ? 2 : 1,
                 ),
               ),
               child: Column(
@@ -403,19 +418,76 @@ class _WeekStrip extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
                           height: 1.1)),
-                  Text('$pct%',
-                      style: TextStyle(
-                          color: isSelected
-                              ? Colors.white70
-                              : EHadirTheme.textSecondary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          height: 1.1)),
+                  // Current week shows a green "kini" marker; others show %.
+                  isCurrent
+                      ? Container(
+                          margin: const EdgeInsets.only(top: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.white
+                                : EHadirTheme.approved,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text('KINI',
+                              style: TextStyle(
+                                  color: isSelected
+                                      ? EHadirTheme.primary
+                                      : Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.1)),
+                        )
+                      : Text('$pct%',
+                          style: TextStyle(
+                              color: isSelected
+                                  ? Colors.white70
+                                  : EHadirTheme.textSecondary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              height: 1.1)),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Slim banner telling the lecturer which week is editable.
+class _CurrentWeekBanner extends StatelessWidget {
+  final int week;
+  const _CurrentWeekBanner({required this.week});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: EHadirTheme.approved.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
+        border: Border.all(color: EHadirTheme.approved.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_clock_rounded,
+              color: EHadirTheme.approved, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Kehadiran hanya boleh ditanda untuk Minggu $week (minggu semasa). '
+              'Minggu lain dipaparkan sebagai rujukan sahaja.',
+              style: const TextStyle(
+                  color: EHadirTheme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -429,6 +501,7 @@ class _AttendanceMatrix extends StatelessWidget {
   final List<StudentModel> students;
   final ClassAttendance attendance;
   final int selectedWeek;
+  final int currentWeek;
   final Future<void> Function(StudentModel, int, AttendanceStatus)
       onCellChanged;
 
@@ -436,6 +509,7 @@ class _AttendanceMatrix extends StatelessWidget {
     required this.students,
     required this.attendance,
     required this.selectedWeek,
+    required this.currentWeek,
     required this.onCellChanged,
   });
 
@@ -471,23 +545,30 @@ class _AttendanceMatrix extends StatelessWidget {
                             fontWeight: FontWeight.w800, fontSize: 12))),
                 for (int i = 0; i < ClassAttendance.weeksPerSemester; i++)
                   DataColumn(
-                    label: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: i == selectedWeek
-                          ? BoxDecoration(
-                              color: EHadirTheme.primary.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(6),
-                            )
-                          : null,
-                      child: Text('M${i + 1}',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 11,
-                              color: i == selectedWeek
-                                  ? EHadirTheme.primary
-                                  : EHadirTheme.textPrimary)),
-                    ),
+                    label: Builder(builder: (_) {
+                      final isCurrent = i == currentWeek;
+                      final isSelected = i == selectedWeek;
+                      final accent = isCurrent
+                          ? EHadirTheme.approved
+                          : EHadirTheme.primary;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: (isCurrent || isSelected)
+                            ? BoxDecoration(
+                                color: accent.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(6),
+                              )
+                            : null,
+                        child: Text('M${i + 1}',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                                color: (isCurrent || isSelected)
+                                    ? accent
+                                    : EHadirTheme.textPrimary)),
+                      );
+                    }),
                   ),
                 const DataColumn(
                     label: Text('%',
@@ -518,6 +599,7 @@ class _AttendanceMatrix extends StatelessWidget {
                       DataCell(_StatusCell(
                         status: attendance.statusFor(s.id, w),
                         highlight: w == selectedWeek,
+                        enabled: w == currentWeek,
                         onCycle: (next) => onCellChanged(s, w, next),
                       )),
                     DataCell(
@@ -556,11 +638,13 @@ class _AttendanceMatrix extends StatelessWidget {
 class _StatusCell extends StatelessWidget {
   final AttendanceStatus status;
   final bool highlight;
+  final bool enabled;
   final ValueChanged<AttendanceStatus> onCycle;
 
   const _StatusCell({
     required this.status,
     required this.highlight,
+    required this.enabled,
     required this.onCycle,
   });
 
@@ -602,32 +686,45 @@ class _StatusCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final empty = status == AttendanceStatus.belum;
+    // Disabled (non-current week) cells are read-only: muted colours, no taps.
+    final box = Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: empty
+            ? (enabled
+                ? Colors.transparent
+                : EHadirTheme.surfaceLight.withValues(alpha: 0.5))
+            : status.color.withValues(alpha: enabled ? 0.15 : 0.07),
+        border: Border.all(
+          color: !enabled
+              ? EHadirTheme.divider
+              : highlight
+                  ? EHadirTheme.primary
+                  : status.color.withValues(alpha: empty ? 0.3 : 0.5),
+          width: highlight && enabled ? 1.5 : 1,
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        empty ? '–' : status.code,
+        style: TextStyle(
+          color: empty
+              ? EHadirTheme.textSecondary.withValues(alpha: enabled ? 1 : 0.5)
+              : status.color.withValues(alpha: enabled ? 1 : 0.55),
+          fontWeight: FontWeight.w800,
+          fontSize: 11,
+        ),
+      ),
+    );
+
+    if (!enabled) return box;
+
     return GestureDetector(
       onTap: () => onCycle(_next(status)),
       onLongPress: () => _openPopup(context),
-      child: Container(
-        width: 34,
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: empty ? Colors.transparent : status.color.withValues(alpha: 0.15),
-          border: Border.all(
-            color: highlight
-                ? EHadirTheme.primary
-                : status.color.withValues(alpha: empty ? 0.3 : 0.5),
-            width: highlight ? 1.5 : 1,
-          ),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          empty ? '–' : status.code,
-          style: TextStyle(
-            color: empty ? EHadirTheme.textSecondary : status.color,
-            fontWeight: FontWeight.w800,
-            fontSize: 11,
-          ),
-        ),
-      ),
+      child: box,
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/attendance_record.dart';
 import '../../models/booking.dart';
 import '../../models/timetable_entry.dart';
 import '../../services/auth_service.dart';
@@ -26,29 +27,18 @@ class WeeklyTimetableScreen extends ConsumerStatefulWidget {
 }
 
 class _WeeklyTimetableScreenState extends ConsumerState<WeeklyTimetableScreen> {
-  /// A semester runs for exactly 14 teaching weeks (M1–M14).
-  static const int _totalWeeks = 14;
-
-  /// Monday of Week 1. The navigator is anchored here, so Week N always maps
-  /// to the same calendar dates regardless of today's date.
-  static final DateTime _semesterStart = DateTime(2026, 6, 8); // Mon 8 Jun 2026
+  /// A semester runs for exactly 14 teaching weeks (M1–M14). Anchored via the
+  /// shared [Semester] helper so this and the attendance grid never drift.
+  static const int _totalWeeks = Semester.totalWeeks;
 
   /// Currently displayed teaching week, clamped to 1..14.
   late int _weekIndex = _currentWeekIndex;
 
-  /// Which teaching week (1..14) contains today — clamped into range so the
-  /// screen always opens on a valid week.
-  int get _currentWeekIndex {
-    final now = DateTime.now();
-    final todayMonday =
-        DateTime(now.year, now.month, now.day - (now.weekday - 1));
-    final weeks = todayMonday.difference(_semesterStart).inDays ~/ 7;
-    return (weeks + 1).clamp(1, _totalWeeks);
-  }
+  /// Which teaching week (1..14) contains today.
+  int get _currentWeekIndex => Semester.currentWeek;
 
   /// Monday of the displayed week.
-  DateTime get _weekStart =>
-      _semesterStart.add(Duration(days: (_weekIndex - 1) * 7));
+  DateTime get _weekStart => Semester.mondayOfWeek(_weekIndex);
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 4)); // Friday
 

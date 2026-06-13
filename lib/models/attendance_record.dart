@@ -189,6 +189,33 @@ class ClassAttendance {
       };
 }
 
+/// Shared academic-calendar helper. One semester runs for [totalWeeks]
+/// teaching weeks (M1–M14), anchored to the Monday of Week 1. Both the weekly
+/// timetable and the attendance grid use this so they always agree on which
+/// calendar week maps to which teaching week.
+class Semester {
+  /// 14 teaching weeks — same as [ClassAttendance.weeksPerSemester].
+  static const int totalWeeks = ClassAttendance.weeksPerSemester;
+
+  /// Monday of Week 1 — SESI JAN–JUN 2026.
+  static final DateTime week1Monday = DateTime(2026, 6, 8);
+
+  /// Monday of [week] (1-based).
+  static DateTime mondayOfWeek(int week) =>
+      week1Monday.add(Duration(days: (week - 1) * 7));
+
+  /// The teaching week (1-based) that contains [date], clamped to 1..totalWeeks.
+  static int weekIndexOf(DateTime date) {
+    final monday =
+        DateTime(date.year, date.month, date.day - (date.weekday - 1));
+    final weeks = monday.difference(week1Monday).inDays ~/ 7;
+    return (weeks + 1).clamp(1, totalWeeks);
+  }
+
+  /// Current teaching week (1-based), clamped to range.
+  static int get currentWeek => weekIndexOf(DateTime.now());
+}
+
 /// One Firestore document per class slot session.
 /// Document id matches the [ClassSlotModel.id] so each slot has at most one record.
 class AttendanceSession {
