@@ -13,6 +13,7 @@ import '../../services/curriculum_service.dart';
 import '../../services/discipline_service.dart';
 import '../../services/mock_db_service.dart';
 import '../../services/reporting_service.dart';
+import '../../services/surat_amaran_service.dart';
 import '../../theme.dart';
 import '../lecturer/lapor_disiplin_screen.dart';
 
@@ -2211,35 +2212,147 @@ class _AtRiskRow extends ConsumerWidget {
                     fontSize: 12)),
           ),
           if (isPensyarah) ...[
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => LaporDisiplinScreen(
-                    prefilledStudentId: item.studentId,
-                    prefilledStudentName: item.studentName,
-                    prefilledStudentClass: item.studentClass,
-                  ),
-                ),
-              ),
-              icon: const Icon(Icons.gavel_rounded, size: 14),
-              label: const Text('Lapor'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: EHadirTheme.rejected,
-                side: BorderSide(
-                  color: EHadirTheme.rejected.withValues(alpha: 0.6),
-                ),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 6),
-                minimumSize: const Size(0, 32),
-                textStyle: const TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w700),
-              ),
-            ),
+            const SizedBox(width: 4),
+            // Actions collapsed into one popup menu: download the tiered
+            // Surat Amaran, or jump to Lapor Disiplin prefilled.
+            _AtRiskActionsMenu(item: item, accent: color),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Popup action menu on each at-risk row (Pensyarah only): download the
+/// Surat Amaran (tier derived from the student's %) or open the discipline
+/// report form prefilled with this student.
+class _AtRiskActionsMenu extends ConsumerStatefulWidget {
+  final AtRiskStudent item;
+  final Color accent;
+  const _AtRiskActionsMenu({required this.item, required this.accent});
+
+  @override
+  ConsumerState<_AtRiskActionsMenu> createState() =>
+      _AtRiskActionsMenuState();
+}
+
+class _AtRiskActionsMenuState extends ConsumerState<_AtRiskActionsMenu> {
+  bool _busy = false;
+
+  Future<void> _downloadSurat() async {
+    final user = ref.read(authProvider).currentUser;
+    if (user == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(suratAmaranServiceProvider).printSuratAmaran(
+            studentName: widget.item.studentName,
+            studentClass: widget.item.studentClass,
+            subjectName: widget.item.subjectName,
+            subjectCode: widget.item.subjectCode,
+            percentage: widget.item.percentage,
+            absentCount: widget.item.absentCount,
+            lecturerName: user.name,
+            program: user.program,
+          );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menjana surat amaran: $e'),
+            backgroundColor: EHadirTheme.rejected,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _openLapor() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LaporDisiplinScreen(
+          prefilledStudentId: widget.item.studentId,
+          prefilledStudentName: widget.item.studentName,
+          prefilledStudentClass: widget.item.studentClass,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tier = AmaranTierX.fromPercentage(widget.item.percentage);
+
+    if (_busy) {
+      return const Padding(
+        padding: EdgeInsets.all(10),
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: 'Tindakan',
+      icon: const Icon(Icons.more_vert_rounded,
+          color: EHadirTheme.textSecondary, size: 20),
+      color: EHadirTheme.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
+        side: const BorderSide(color: EHadirTheme.divider),
+      ),
+      onSelected: (action) {
+        switch (action) {
+          case 'surat':
+            _downloadSurat();
+            break;
+          case 'lapor':
+            _openLapor();
+            break;
+        }
+      },
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+          value: 'surat',
+          child: Row(
+            children: [
+              Icon(Icons.download_rounded, size: 18, color: widget.accent),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Muat Turun Surat Amaran',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(tier.label,
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: widget.accent)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'lapor',
+          child: Row(
+            children: [
+              Icon(Icons.gavel_rounded,
+                  size: 18, color: EHadirTheme.rejected),
+              SizedBox(width: 10),
+              Text('Lapor Disiplin',
+                  style:
+                      TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

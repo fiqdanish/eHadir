@@ -82,6 +82,7 @@ class ReportingService {
           studentId: sid,
           studentName: studentNames[sid] ?? sid,
           subjectName: c.subjectName,
+          subjectCode: c.subjectCode,
           studentClass: c.studentClass,
           percentage: pct,
           absentCount: absent,
@@ -207,6 +208,7 @@ class ReportingService {
             studentId: sid,
             studentName: studentNames[sid] ?? sid,
             subjectName: c.subjectName,
+            subjectCode: c.subjectCode,
             studentClass: c.studentClass,
             percentage: pct,
             absentCount: list.where((e) => e == 'T').length,
@@ -271,6 +273,7 @@ class AtRiskStudent {
   final String studentId;
   final String studentName;
   final String subjectName;
+  final String subjectCode;
   final String studentClass;
   final double percentage;
   final int absentCount;
@@ -279,6 +282,7 @@ class AtRiskStudent {
     required this.studentId,
     required this.studentName,
     required this.subjectName,
+    required this.subjectCode,
     required this.studentClass,
     required this.percentage,
     required this.absentCount,
