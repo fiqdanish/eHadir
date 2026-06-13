@@ -207,7 +207,7 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
               currentWeek: currentWeek,
               studentCount: students.length,
             ),
-            _CurrentWeekBanner(week: currentWeek + 1),
+            _CurrentWeekBanner(week: _selectedWeek + 1),
             const SizedBox(height: 4),
             Expanded(
               child: students.isEmpty
@@ -216,7 +216,6 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
                       students: students,
                       attendance: current,
                       selectedWeek: _selectedWeek,
-                      currentWeek: currentWeek,
                       onCellChanged: (s, w, st) async {
                         await attendance.setWeekCell(
                           base: current,
@@ -457,7 +456,7 @@ class _WeekStrip extends StatelessWidget {
   }
 }
 
-/// Slim banner telling the lecturer which week is editable.
+/// Slim banner telling the lecturer which week is currently editable.
 class _CurrentWeekBanner extends StatelessWidget {
   final int week;
   const _CurrentWeekBanner({required this.week});
@@ -468,19 +467,19 @@ class _CurrentWeekBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: EHadirTheme.approved.withValues(alpha: 0.10),
+        color: EHadirTheme.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
-        border: Border.all(color: EHadirTheme.approved.withValues(alpha: 0.35)),
+        border: Border.all(color: EHadirTheme.primary.withValues(alpha: 0.30)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.lock_clock_rounded,
-              color: EHadirTheme.approved, size: 16),
+          const Icon(Icons.edit_calendar_rounded,
+              color: EHadirTheme.primary, size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Kehadiran hanya boleh ditanda untuk Minggu $week (minggu semasa). '
-              'Minggu lain dipaparkan sebagai rujukan sahaja.',
+              'Sedang menanda kehadiran untuk Minggu $week. '
+              'Pilih tab minggu di atas untuk menukar — minggu lain dikunci.',
               style: const TextStyle(
                   color: EHadirTheme.textSecondary,
                   fontSize: 11,
@@ -501,7 +500,6 @@ class _AttendanceMatrix extends StatelessWidget {
   final List<StudentModel> students;
   final ClassAttendance attendance;
   final int selectedWeek;
-  final int currentWeek;
   final Future<void> Function(StudentModel, int, AttendanceStatus)
       onCellChanged;
 
@@ -509,7 +507,6 @@ class _AttendanceMatrix extends StatelessWidget {
     required this.students,
     required this.attendance,
     required this.selectedWeek,
-    required this.currentWeek,
     required this.onCellChanged,
   });
 
@@ -545,30 +542,23 @@ class _AttendanceMatrix extends StatelessWidget {
                             fontWeight: FontWeight.w800, fontSize: 12))),
                 for (int i = 0; i < ClassAttendance.weeksPerSemester; i++)
                   DataColumn(
-                    label: Builder(builder: (_) {
-                      final isCurrent = i == currentWeek;
-                      final isSelected = i == selectedWeek;
-                      final accent = isCurrent
-                          ? EHadirTheme.approved
-                          : EHadirTheme.primary;
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: (isCurrent || isSelected)
-                            ? BoxDecoration(
-                                color: accent.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(6),
-                              )
-                            : null,
-                        child: Text('M${i + 1}',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11,
-                                color: (isCurrent || isSelected)
-                                    ? accent
-                                    : EHadirTheme.textPrimary)),
-                      );
-                    }),
+                    label: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: i == selectedWeek
+                          ? BoxDecoration(
+                              color: EHadirTheme.primary.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                            )
+                          : null,
+                      child: Text('M${i + 1}',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                              color: i == selectedWeek
+                                  ? EHadirTheme.primary
+                                  : EHadirTheme.textPrimary)),
+                    ),
                   ),
                 const DataColumn(
                     label: Text('%',
@@ -599,7 +589,7 @@ class _AttendanceMatrix extends StatelessWidget {
                       DataCell(_StatusCell(
                         status: attendance.statusFor(s.id, w),
                         highlight: w == selectedWeek,
-                        enabled: w == currentWeek,
+                        enabled: w == selectedWeek,
                         onCycle: (next) => onCellChanged(s, w, next),
                       )),
                     DataCell(
