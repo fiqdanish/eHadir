@@ -31,7 +31,7 @@ class AppShellState extends ConsumerState<AppShell> {
   int _laporanTab = 0;
 
   void navigateToTab(int index) {
-    if (index >= 0 && index < _buildScreens().length) {
+    if (index >= 0 && index < _buildTabs().length) {
       setState(() => _currentIndex = index);
     }
   }
@@ -51,10 +51,11 @@ class AppShellState extends ConsumerState<AppShell> {
     });
   }
 
-  List<Widget> _buildScreens() {
-    // 0: Utama, 1: Jadual, 2: Kehadiran, 3: Laporan, 4: Profil/Tempah Bilik
+  List<_NavTab> _buildTabs() {
+    final role = widget.currentUser.role;
+
     Widget utama;
-    switch (widget.currentUser.role) {
+    switch (role) {
       case UserRole.admin:
         utama = const AdminDashboardScreen();
         break;
@@ -72,28 +73,41 @@ class AppShellState extends ConsumerState<AppShell> {
         break;
     }
 
+    // Laporan tab:
+    //   Pensyarah → hub with both Statistik (M3) and Lapor Disiplin (M2 submit)
+    //   KP / KJ / Admin / TPA → ReportingScreen only (reviewer roles don't file
+    //     reports — they use their dashboard cards to open review screens).
+    final Widget laporan = role == UserRole.pensyarah
+        ? LaporanHubScreen(
+            key: ValueKey('laporan-$_laporanTab'),
+            initialTab: _laporanTab,
+          )
+        : Scaffold(
+            appBar: AppBar(title: const Text('Laporan')),
+            body: const ReportingScreen(),
+          );
+
+    // Jadual + Kehadiran are lecturer-only modules. Neither the Ketua Program
+    // nor the Ketua Jabatan teaches, so those two tabs are hidden for them.
+    final showLecturerTabs = role != UserRole.ketuaProgram &&
+        role != UserRole.ketuaJabatan;
+
     return [
-      utama,
-      const WeeklyTimetableScreen(), // Jadual — fed by TimetableEntry rows built by Ketua Jabatan
-      AmbilKehadiranScreen(
-        key: ValueKey(_attendanceSlotId ?? 'attendance-tab'),
-        initialSlotId: _attendanceSlotId,
-      ), // Kehadiran
-      // Tab 3 — Laporan
-      //   Pensyarah → hub with both Statistik (M3) and Lapor Disiplin (M2 submit)
-      //   KP / KJ / Admin / TPA → ReportingScreen only (no submit form;
-      //     reviewer roles don't file reports — they use their dashboard
-      //     cards to open the review / action screens).
-      widget.currentUser.role == UserRole.pensyarah
-          ? LaporanHubScreen(
-              key: ValueKey('laporan-$_laporanTab'),
-              initialTab: _laporanTab,
-            )
-          : Scaffold(
-              appBar: AppBar(title: const Text('Laporan')),
-              body: const ReportingScreen(),
-            ),
-      const ProfileScreen(), // Profil
+      _NavTab(Icons.home_rounded, 'Utama', utama),
+      if (showLecturerTabs)
+        _NavTab(Icons.calendar_month_rounded, 'Jadual',
+            const WeeklyTimetableScreen()),
+      if (showLecturerTabs)
+        _NavTab(
+          Icons.fact_check_rounded,
+          'Kehadiran',
+          AmbilKehadiranScreen(
+            key: ValueKey(_attendanceSlotId ?? 'attendance-tab'),
+            initialSlotId: _attendanceSlotId,
+          ),
+        ),
+      _NavTab(Icons.bar_chart_rounded, 'Laporan', laporan),
+      _NavTab(Icons.person_rounded, 'Profil', const ProfileScreen()),
     ];
   }
 
@@ -147,11 +161,13 @@ class AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final screens = _buildScreens();
+    final tabs = _buildTabs();
+    // Clamp in case the active index is beyond this role's (shorter) tab list.
+    final index = _currentIndex.clamp(0, tabs.length - 1);
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
+        index: index,
+        children: [for (final t in tabs) t.screen],
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
@@ -172,15 +188,20 @@ class AppShellState extends ConsumerState<AppShell> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(0, Icons.home_rounded, 'Utama'),
-              _buildNavItem(1, Icons.calendar_month_rounded, 'Jadual'),
-              _buildNavItem(2, Icons.fact_check_rounded, 'Kehadiran'),
-              _buildNavItem(3, Icons.bar_chart_rounded, 'Laporan'),
-              _buildNavItem(4, Icons.person_rounded, 'Profil'),
+              for (int i = 0; i < tabs.length; i++)
+                _buildNavItem(i, tabs[i].icon, tabs[i].label),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// A single bottom-navigation destination: its icon, label, and screen.
+class _NavTab {
+  final IconData icon;
+  final String label;
+  final Widget screen;
+  const _NavTab(this.icon, this.label, this.screen);
 }

@@ -10,9 +10,10 @@ import '../../services/mock_db_service.dart';
 import '../../services/seed_data.dart';
 import '../../theme.dart';
 
-/// Ketua Jabatan: pulls every LecturerAssignment under their department,
-/// lets them place each one on the weekly timetable (day + period range +
-/// room), and saves the resulting [TimetableEntry] documents to Firestore.
+/// Ketua Program: pulls every LecturerAssignment for their program (created by
+/// the Ketua Jabatan in Tugaskan Subjek), lets them place each one on the
+/// weekly timetable (day + time + room), and saves the resulting
+/// [TimetableEntry] documents to Firestore.
 class BinaJadualScreen extends ConsumerStatefulWidget {
   const BinaJadualScreen({super.key});
 
@@ -73,9 +74,9 @@ class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).currentUser!;
-    final department = user.program; // KJ stores dept name in `program`
+    final program = user.program; // KP oversees a single program
+    final programKey = Department.programKeyOf(program);
     final curriculum = ref.read(curriculumServiceProvider);
-    final programKeys = Department.programsOf[department] ?? const [];
 
     return Scaffold(
       appBar: AppBar(
@@ -90,11 +91,11 @@ class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
       ),
       body: Column(
         children: [
-          _DeptHeader(department: department, programKeys: programKeys),
+          _DeptHeader(program: program, programKey: programKey),
           if (_seeding) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: StreamBuilder<List<LecturerAssignment>>(
-              stream: curriculum.streamAssignmentsForDepartment(department),
+              stream: curriculum.streamAssignmentsForProgramKey(programKey),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -139,9 +140,9 @@ class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
 // ═══════════════════════════════════════════════════════════════
 
 class _DeptHeader extends StatelessWidget {
-  final String department;
-  final List<String> programKeys;
-  const _DeptHeader({required this.department, required this.programKeys});
+  final String program;
+  final String programKey;
+  const _DeptHeader({required this.program, required this.programKey});
 
   @override
   Widget build(BuildContext context) {
@@ -160,37 +161,30 @@ class _DeptHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('JABATAN',
+          const Text('PROGRAM',
               style: TextStyle(
                   color: Colors.white70,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2)),
           const SizedBox(height: 4),
-          Text(department,
+          Text(program,
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: programKeys
-                .map((p) => Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(p,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700)),
-                    ))
-                .toList(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(programKey,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -491,9 +485,14 @@ class _PlacementSheetState extends ConsumerState<_PlacementSheet> {
       assignedBy: widget.kj.id,
     );
 
-    final all = await curriculum
-        .streamEntriesForDepartment(widget.kj.program)
-        .first;
+    // Check for clashes across the whole department (rooms/lecturers may be
+    // shared between sibling programs), derived from the program's key.
+    final dept = Department.departmentOfProgram(
+            Department.programKeyOf(widget.kj.program)) ??
+        '';
+    final all = dept.isEmpty
+        ? const <TimetableEntry>[]
+        : await curriculum.streamEntriesForDepartment(dept).first;
     final conflicts =
         CurriculumService.findConflicts(candidate: candidate, existing: all);
 

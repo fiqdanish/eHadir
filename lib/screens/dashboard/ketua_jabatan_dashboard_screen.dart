@@ -5,8 +5,8 @@ import '../../services/auth_service.dart';
 import '../../services/discipline_service.dart';
 import '../../theme.dart';
 import '../../utils/dialogs.dart';
-import '../ketua_jabatan/bina_jadual_screen.dart';
 import '../ketua_jabatan/laporan_disiplin_kj_screen.dart';
+import '../ketua_program/tugaskan_subjek_screen.dart';
 
 class KetuaJabatanDashboardScreen extends ConsumerWidget {
   const KetuaJabatanDashboardScreen({super.key});
@@ -98,12 +98,12 @@ class KetuaJabatanDashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
 
-              // ─── Bina Jadual entry ───
+              // ─── Tugaskan Subjek entry ───
               InkWell(
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => const BinaJadualScreen()),
+                      builder: (_) => const TugaskanSubjekScreen()),
                 ),
                 borderRadius: BorderRadius.circular(EHadirTheme.radiusLg),
                 child: Container(
@@ -125,7 +125,7 @@ class KetuaJabatanDashboardScreen extends ConsumerWidget {
                           borderRadius:
                               BorderRadius.circular(EHadirTheme.radiusMd),
                         ),
-                        child: const Icon(Icons.calendar_view_week_rounded,
+                        child: const Icon(Icons.library_books_rounded,
                             color: EHadirTheme.primary, size: 24),
                       ),
                       const SizedBox(width: 12),
@@ -133,14 +133,14 @@ class KetuaJabatanDashboardScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Bina Jadual Mingguan',
+                            Text('Tugaskan Subjek Pensyarah',
                                 style: TextStyle(
                                     color: EHadirTheme.textPrimary,
                                     fontSize: 15,
                                     fontWeight: FontWeight.w800)),
                             SizedBox(height: 2),
                             Text(
-                                'Susun hari, slot masa, dan bilik bagi setiap tugasan pensyarah',
+                                'Tetapkan subjek yang diajar setiap pensyarah dalam jabatan',
                                 style: TextStyle(
                                     color: EHadirTheme.textSecondary,
                                     fontSize: 12)),
