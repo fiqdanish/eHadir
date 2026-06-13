@@ -26,6 +26,11 @@ class AmbilKehadiranScreen extends ConsumerStatefulWidget {
   final String? studentClass;
   final String? program;
 
+  /// 1-based teaching week (M1 = 1) to open on. When the lecturer taps a class
+  /// from the timetable, this is the week they were viewing. Null → defaults to
+  /// the current calendar week.
+  final int? initialWeek;
+
   /// Legacy parameter kept for AppShell's deep-link compatibility. Ignored
   /// by the new grid flow.
   final String? initialSlotId;
@@ -36,6 +41,7 @@ class AmbilKehadiranScreen extends ConsumerStatefulWidget {
     this.subjectName,
     this.studentClass,
     this.program,
+    this.initialWeek,
     this.initialSlotId,
   });
 
@@ -58,9 +64,10 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
     _subjectName = widget.subjectName;
     _studentClass = widget.studentClass;
     _program = widget.program;
-    // Open on (and highlight) the current teaching week — the only one the
-    // lecturer is allowed to edit.
-    _selectedWeek = Semester.currentWeek - 1; // 0-indexed (M1 = 0)
+    // Open on the week the lecturer tapped from the timetable (1-based), else
+    // fall back to the current calendar week. Stored 0-indexed (M1 = 0).
+    _selectedWeek = ((widget.initialWeek ?? Semester.currentWeek) - 1)
+        .clamp(0, ClassAttendance.weeksPerSemester - 1);
   }
 
   bool get _hasContext =>
@@ -181,9 +188,6 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
               lecturerName: user.name,
             );
 
-        // Only the current teaching week is editable (0-indexed; M1 = 0).
-        final int currentWeek = Semester.currentWeek - 1;
-
         return Column(
           children: [
             _ClassHeader(
@@ -204,7 +208,6 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
               selected: _selectedWeek,
               onChanged: (w) => setState(() => _selectedWeek = w),
               current: current,
-              currentWeek: currentWeek,
               studentCount: students.length,
             ),
             _CurrentWeekBanner(week: _selectedWeek + 1),
@@ -358,13 +361,11 @@ class _WeekStrip extends StatelessWidget {
   final int selected;
   final ValueChanged<int> onChanged;
   final ClassAttendance current;
-  final int currentWeek;
   final int studentCount;
   const _WeekStrip({
     required this.selected,
     required this.onChanged,
     required this.current,
-    required this.currentWeek,
     required this.studentCount,
   });
 
@@ -378,7 +379,6 @@ class _WeekStrip extends StatelessWidget {
         itemCount: ClassAttendance.weeksPerSemester,
         itemBuilder: (ctx, i) {
           final isSelected = i == selected;
-          final isCurrent = i == currentWeek;
           int marked = 0;
           current.weeks.forEach((sid, list) {
             if (i < list.length && list[i].isNotEmpty) marked++;
@@ -397,12 +397,10 @@ class _WeekStrip extends StatelessWidget {
                     : EHadirTheme.surfaceLight,
                 borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
                 border: Border.all(
-                  color: isCurrent
-                      ? EHadirTheme.approved
-                      : isSelected
-                          ? EHadirTheme.primary
-                          : EHadirTheme.divider,
-                  width: isCurrent ? 2 : 1,
+                  color: isSelected
+                      ? EHadirTheme.primary
+                      : EHadirTheme.divider,
+                  width: isSelected ? 2 : 1,
                 ),
               ),
               child: Column(
@@ -417,32 +415,27 @@ class _WeekStrip extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
                           height: 1.1)),
-                  // Current week shows a green "kini" marker; others show %.
-                  isCurrent
+                  // The active (selected) week is the editable one — badge it
+                  // "KINI"; the rest show their completion %.
+                  isSelected
                       ? Container(
                           margin: const EdgeInsets.only(top: 2),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.white
-                                : EHadirTheme.approved,
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text('KINI',
+                          child: const Text('KINI',
                               style: TextStyle(
-                                  color: isSelected
-                                      ? EHadirTheme.primary
-                                      : Colors.white,
+                                  color: EHadirTheme.primary,
                                   fontSize: 8,
                                   fontWeight: FontWeight.w900,
                                   height: 1.1)),
                         )
                       : Text('$pct%',
-                          style: TextStyle(
-                              color: isSelected
-                                  ? Colors.white70
-                                  : EHadirTheme.textSecondary,
+                          style: const TextStyle(
+                              color: EHadirTheme.textSecondary,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                               height: 1.1)),

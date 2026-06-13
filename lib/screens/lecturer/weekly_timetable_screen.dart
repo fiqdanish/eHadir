@@ -532,6 +532,9 @@ class _TimetableGrid extends StatelessWidget {
                             subjectName:  subjectName,
                             studentClass: studentClass,
                             program:      program,
+                            // Open the attendance grid on the week the lecturer
+                            // is currently viewing in the timetable.
+                            initialWeek: Semester.weekIndexOf(weekStart),
                           ),
                         ),
                       );
