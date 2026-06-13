@@ -206,7 +206,6 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
             ),
             _WeekStrip(
               selected: _selectedWeek,
-              onChanged: (w) => setState(() => _selectedWeek = w),
               current: current,
               studentCount: students.length,
             ),
@@ -359,12 +358,10 @@ class _MiniChip extends StatelessWidget {
 
 class _WeekStrip extends StatelessWidget {
   final int selected;
-  final ValueChanged<int> onChanged;
   final ClassAttendance current;
   final int studentCount;
   const _WeekStrip({
     required this.selected,
-    required this.onChanged,
     required this.current,
     required this.studentCount,
   });
@@ -384,65 +381,65 @@ class _WeekStrip extends StatelessWidget {
             if (i < list.length && list[i].isNotEmpty) marked++;
           });
           final pct = studentCount == 0 ? 0 : (marked * 100 ~/ studentCount);
-          return GestureDetector(
-            onTap: () => onChanged(i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 56,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
+          final chip = AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 56,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? EHadirTheme.primary
+                  : EHadirTheme.surfaceLight,
+              borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
+              border: Border.all(
                 color: isSelected
                     ? EHadirTheme.primary
-                    : EHadirTheme.surfaceLight,
-                borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
-                border: Border.all(
-                  color: isSelected
-                      ? EHadirTheme.primary
-                      : EHadirTheme.divider,
-                  width: isSelected ? 2 : 1,
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('M${i + 1}',
-                      style: TextStyle(
-                          color: isSelected
-                              ? Colors.white
-                              : EHadirTheme.textPrimary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                          height: 1.1)),
-                  // The active (selected) week is the editable one — badge it
-                  // "KINI"; the rest show their completion %.
-                  isSelected
-                      ? Container(
-                          margin: const EdgeInsets.only(top: 2),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text('KINI',
-                              style: TextStyle(
-                                  color: EHadirTheme.primary,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w900,
-                                  height: 1.1)),
-                        )
-                      : Text('$pct%',
-                          style: const TextStyle(
-                              color: EHadirTheme.textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              height: 1.1)),
-                ],
+                    : EHadirTheme.divider,
+                width: isSelected ? 2 : 1,
               ),
             ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('M${i + 1}',
+                    style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : EHadirTheme.textPrimary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        height: 1.1)),
+                // The active (selected) week is the editable one — badge it
+                // "KINI"; the rest show their completion %.
+                isSelected
+                    ? Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text('KINI',
+                            style: TextStyle(
+                                color: EHadirTheme.primary,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                                height: 1.1)),
+                      )
+                    : Text('$pct%',
+                        style: const TextStyle(
+                            color: EHadirTheme.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            height: 1.1)),
+              ],
+            ),
           );
+          // Navigation is disabled: the active week is shown crisply, every
+          // other week is dimmed and non-interactive (no tap handler).
+          return isSelected ? chip : Opacity(opacity: 0.4, child: chip);
         },
       ),
     );
@@ -466,13 +463,13 @@ class _CurrentWeekBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.edit_calendar_rounded,
+          const Icon(Icons.lock_rounded,
               color: EHadirTheme.primary, size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Sedang menanda kehadiran untuk Minggu $week. '
-              'Pilih tab minggu di atas untuk menukar — minggu lain dikunci.',
+              'Minggu lain dikunci untuk kelas ini.',
               style: const TextStyle(
                   color: EHadirTheme.textSecondary,
                   fontSize: 11,
