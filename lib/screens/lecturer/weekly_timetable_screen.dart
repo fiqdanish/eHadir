@@ -26,15 +26,29 @@ class WeeklyTimetableScreen extends ConsumerStatefulWidget {
 }
 
 class _WeeklyTimetableScreenState extends ConsumerState<WeeklyTimetableScreen> {
-  /// Offset from the current week. 0 = this week, -1 = last week, +1 = next.
-  int _weekOffset = 0;
+  /// A semester runs for exactly 14 teaching weeks (M1–M14).
+  static const int _totalWeeks = 14;
 
-  /// Compute Monday of the displayed week.
-  DateTime get _weekStart {
+  /// Monday of Week 1. The navigator is anchored here, so Week N always maps
+  /// to the same calendar dates regardless of today's date.
+  static final DateTime _semesterStart = DateTime(2026, 6, 8); // Mon 8 Jun 2026
+
+  /// Currently displayed teaching week, clamped to 1..14.
+  late int _weekIndex = _currentWeekIndex;
+
+  /// Which teaching week (1..14) contains today — clamped into range so the
+  /// screen always opens on a valid week.
+  int get _currentWeekIndex {
     final now = DateTime.now();
-    final monday = DateTime(now.year, now.month, now.day - (now.weekday - 1));
-    return monday.add(Duration(days: _weekOffset * 7));
+    final todayMonday =
+        DateTime(now.year, now.month, now.day - (now.weekday - 1));
+    final weeks = todayMonday.difference(_semesterStart).inDays ~/ 7;
+    return (weeks + 1).clamp(1, _totalWeeks);
   }
+
+  /// Monday of the displayed week.
+  DateTime get _weekStart =>
+      _semesterStart.add(Duration(days: (_weekIndex - 1) * 7));
 
   DateTime get _weekEnd => _weekStart.add(const Duration(days: 4)); // Friday
 
@@ -44,7 +58,9 @@ class _WeeklyTimetableScreenState extends ConsumerState<WeeklyTimetableScreen> {
     final curriculum = ref.read(curriculumServiceProvider);
     final bookingSvc = ref.read(firestoreBookingProvider);
     final fmt        = DateFormat('dd MMM');
-    final isThisWeek = _weekOffset == 0;
+    final isThisWeek = _weekIndex == _currentWeekIndex;
+    final isFirst    = _weekIndex <= 1;
+    final isLast     = _weekIndex >= _totalWeeks;
 
     return Scaffold(
       appBar: AppBar(
@@ -92,13 +108,14 @@ class _WeeklyTimetableScreenState extends ConsumerState<WeeklyTimetableScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Back arrow
+                        // Back arrow — disabled on Week 1
                         IconButton(
-                          icon: const Icon(
-                              Icons.chevron_left_rounded,
-                              color: EHadirTheme.primary),
-                          onPressed: () =>
-                              setState(() => _weekOffset--),
+                          icon: const Icon(Icons.chevron_left_rounded),
+                          color: EHadirTheme.primary,
+                          disabledColor: EHadirTheme.divider,
+                          onPressed: isFirst
+                              ? null
+                              : () => setState(() => _weekIndex--),
                           tooltip: 'Minggu sebelumnya',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -109,10 +126,8 @@ class _WeeklyTimetableScreenState extends ConsumerState<WeeklyTimetableScreen> {
                           children: [
                             Text(
                               isThisWeek
-                                  ? 'Minggu Ini'
-                                  : _weekOffset < 0
-                                      ? 'Minggu Lepas (${_weekOffset.abs()} minggu lalu)'
-                                      : 'Minggu Hadapan ($_weekOffset minggu akan datang)',
+                                  ? 'Minggu $_weekIndex / $_totalWeeks · Minggu Ini'
+                                  : 'Minggu $_weekIndex / $_totalWeeks',
                               style: const TextStyle(
                                 color: EHadirTheme.textSecondary,
                                 fontSize: 11,
@@ -130,13 +145,14 @@ class _WeeklyTimetableScreenState extends ConsumerState<WeeklyTimetableScreen> {
                           ],
                         ),
 
-                        // Forward arrow
+                        // Forward arrow — disabled on Week 14
                         IconButton(
-                          icon: const Icon(
-                              Icons.chevron_right_rounded,
-                              color: EHadirTheme.primary),
-                          onPressed: () =>
-                              setState(() => _weekOffset++),
+                          icon: const Icon(Icons.chevron_right_rounded),
+                          color: EHadirTheme.primary,
+                          disabledColor: EHadirTheme.divider,
+                          onPressed: isLast
+                              ? null
+                              : () => setState(() => _weekIndex++),
                           tooltip: 'Minggu seterusnya',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
