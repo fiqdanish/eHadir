@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../models/department.dart';
 import '../../models/lecturer_assignment.dart';
 import '../../models/timetable_entry.dart';
@@ -11,9 +10,10 @@ import '../../services/mock_db_service.dart';
 import '../../services/seed_data.dart';
 import '../../theme.dart';
 
-/// Ketua Jabatan: pulls every LecturerAssignment under their department,
-/// lets them place each one on the weekly timetable (day + period range +
-/// room), and saves the resulting [TimetableEntry] documents to Firestore.
+/// Ketua Program: pulls every LecturerAssignment for their program (created by
+/// the Ketua Jabatan in Tugaskan Subjek), lets them place each one on the
+/// weekly timetable (day + time + room), and saves the resulting
+/// [TimetableEntry] documents to Firestore.
 class BinaJadualScreen extends ConsumerStatefulWidget {
   const BinaJadualScreen({super.key});
 
@@ -74,9 +74,9 @@ class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).currentUser!;
-    final department = user.program; // KJ stores dept name in `program`
+    final program = user.program; // KP oversees a single program
+    final programKey = Department.programKeyOf(program);
     final curriculum = ref.read(curriculumServiceProvider);
-    final programKeys = Department.programsOf[department] ?? const [];
 
     return Scaffold(
       appBar: AppBar(
@@ -91,11 +91,11 @@ class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
       ),
       body: Column(
         children: [
-          _DeptHeader(department: department, programKeys: programKeys),
+          _DeptHeader(program: program, programKey: programKey),
           if (_seeding) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: StreamBuilder<List<LecturerAssignment>>(
-              stream: curriculum.streamAssignmentsForDepartment(department),
+              stream: curriculum.streamAssignmentsForProgramKey(programKey),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -140,9 +140,9 @@ class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
 // ═══════════════════════════════════════════════════════════════
 
 class _DeptHeader extends StatelessWidget {
-  final String department;
-  final List<String> programKeys;
-  const _DeptHeader({required this.department, required this.programKeys});
+  final String program;
+  final String programKey;
+  const _DeptHeader({required this.program, required this.programKey});
 
   @override
   Widget build(BuildContext context) {
@@ -161,37 +161,30 @@ class _DeptHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('JABATAN',
+          const Text('PROGRAM',
               style: TextStyle(
                   color: Colors.white70,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2)),
           const SizedBox(height: 4),
-          Text(department,
+          Text(program,
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: programKeys
-                .map((p) => Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(p,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700)),
-                    ))
-                .toList(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(programKey,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -381,7 +374,7 @@ class _SlotPill extends StatelessWidget {
   Widget build(BuildContext context) {
     String fmt(TimeOfDay t) =>
         '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-    final dateStr = DateFormat('EEE, d MMM').format(entry.date);
+    final dayStr = entry.day.long;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
       decoration: BoxDecoration(
@@ -392,7 +385,7 @@ class _SlotPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(dateStr,
+          Text(dayStr,
               style: const TextStyle(
                   color: EHadirTheme.primary,
                   fontSize: 11,
@@ -433,7 +426,7 @@ class _PlacementSheet extends ConsumerStatefulWidget {
 }
 
 class _PlacementSheetState extends ConsumerState<_PlacementSheet> {
-  DateTime? _date;
+  SchoolDay? _day;
   TimeOfDay _start = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _end = const TimeOfDay(hour: 10, minute: 0);
   String? _room;
@@ -441,25 +434,13 @@ class _PlacementSheetState extends ConsumerState<_PlacementSheet> {
   List<TimetableEntry> _conflicts = [];
 
   bool get _canSave =>
-      _date != null && _room != null && _room!.isNotEmpty && !_saving;
+      _day != null && _room != null && _room!.isNotEmpty && !_saving;
 
-  Future<void> _pickDate() async {
-    final dt = await showDatePicker(
-      context: context,
-      initialDate: _date ?? DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (ctx, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: Theme.of(context)
-              .colorScheme
-              .copyWith(primary: EHadirTheme.primary),
-        ),
-        child: child!,
-      ),
-    );
-    if (dt != null) setState(() => _date = dt);
-  }
+  /// The chosen day + time repeats every week for the whole semester, so we
+  /// only need a representative date whose weekday matches the chosen day.
+  /// Anchor to the first teaching week of SESI JAN–JUN 2026 (Mon 5 Jan 2026).
+  static DateTime _dateForDay(SchoolDay day) =>
+      DateTime(2026, 1, 5).add(Duration(days: day.weekday - 1));
 
   Future<void> _pickStart() async {
     final t = await showTimePicker(context: context, initialTime: _start);
@@ -498,15 +479,20 @@ class _PlacementSheetState extends ConsumerState<_PlacementSheet> {
       program: widget.assignment.program,
       studentClass: widget.assignment.studentClass,
       room: _room!.trim(),
-      date: _date!,
+      date: _dateForDay(_day!),
       startTime: _start,
       endTime: _end,
       assignedBy: widget.kj.id,
     );
 
-    final all = await curriculum
-        .streamEntriesForDepartment(widget.kj.program)
-        .first;
+    // Check for clashes across the whole department (rooms/lecturers may be
+    // shared between sibling programs), derived from the program's key.
+    final dept = Department.departmentOfProgram(
+            Department.programKeyOf(widget.kj.program)) ??
+        '';
+    final all = dept.isEmpty
+        ? const <TimetableEntry>[]
+        : await curriculum.streamEntriesForDepartment(dept).first;
     final conflicts =
         CurriculumService.findConflicts(candidate: candidate, existing: all);
 
@@ -524,7 +510,7 @@ class _PlacementSheetState extends ConsumerState<_PlacementSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              '${widget.assignment.subjectCode} disusun ke ${DateFormat('d MMM').format(_date!)}.'),
+              '${widget.assignment.subjectCode} dijadualkan setiap hari ${_day!.long}.'),
           backgroundColor: EHadirTheme.approved,
         ),
       );
@@ -573,10 +559,18 @@ class _PlacementSheetState extends ConsumerState<_PlacementSheet> {
             ),
             const SizedBox(height: 20),
 
-            // ── 1) DATE ────────────────────────────────────
-            const _SectionLabel('Pilih Tarikh & Masa'),
-            const SizedBox(height: 8),
-            _DateCard(date: _date, onTap: _pickDate),
+            // ── 1) DAY (recurring weekly) ──────────────────
+            const _SectionLabel('Pilih Hari & Masa'),
+            const SizedBox(height: 4),
+            const Text(
+              'Hari & masa ini akan berulang setiap minggu sepanjang semester.',
+              style: TextStyle(color: EHadirTheme.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            _DaySelector(
+              selected: _day,
+              onChanged: (d) => setState(() => _day = d),
+            ),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -674,7 +668,7 @@ class _PlacementSheetState extends ConsumerState<_PlacementSheet> {
                     ..._conflicts.map((c) => Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
-                            '• ${c.subjectCode} (${c.lecturerName}) — ${DateFormat('d MMM').format(c.date)} '
+                            '• ${c.subjectCode} (${c.lecturerName}) — ${c.day.long} '
                             '${_fmt(c.startTime)}–${_fmt(c.endTime)}, ${c.room}',
                             style: const TextStyle(
                                 color: EHadirTheme.textPrimary, fontSize: 12),
@@ -718,61 +712,56 @@ class _SectionLabel extends StatelessWidget {
           fontSize: 15));
 }
 
-class _DateCard extends StatelessWidget {
-  final DateTime? date;
-  final VoidCallback onTap;
-  const _DateCard({required this.date, required this.onTap});
+class _DaySelector extends StatelessWidget {
+  final SchoolDay? selected;
+  final ValueChanged<SchoolDay> onChanged;
+  const _DaySelector({required this.selected, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: EHadirTheme.card,
-          borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
-          border: Border.all(color: EHadirTheme.divider),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: EHadirTheme.accent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(EHadirTheme.radiusSm),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: SchoolDay.values.map((d) {
+        final sel = selected == d;
+        return GestureDetector(
+          onTap: () => onChanged(d),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            decoration: BoxDecoration(
+              color: sel
+                  ? EHadirTheme.primary.withValues(alpha: 0.12)
+                  : EHadirTheme.card,
+              borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
+              border: Border.all(
+                color: sel ? EHadirTheme.primary : EHadirTheme.divider,
+                width: sel ? 2 : 1,
               ),
-              child: const Icon(Icons.calendar_today_rounded,
-                  color: EHadirTheme.accent, size: 18),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Tarikh',
-                      style: TextStyle(
-                          color: EHadirTheme.textSecondary, fontSize: 11)),
-                  const SizedBox(height: 2),
-                  Text(
-                    date != null
-                        ? DateFormat('EEEE, dd MMMM yyyy').format(date!)
-                        : 'Tekan untuk pilih tarikh',
-                    style: TextStyle(
-                      color: date != null
-                          ? EHadirTheme.textPrimary
-                          : EHadirTheme.textSecondary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (sel)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: Icon(Icons.check_circle_rounded,
+                        color: EHadirTheme.primary, size: 16),
                   ),
-                ],
-              ),
+                Text(
+                  d.long,
+                  style: TextStyle(
+                    color:
+                        sel ? EHadirTheme.primary : EHadirTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      }).toList(),
     );
   }
 }

@@ -26,6 +26,11 @@ class AmbilKehadiranScreen extends ConsumerStatefulWidget {
   final String? studentClass;
   final String? program;
 
+  /// 1-based teaching week (M1 = 1) to open on. When the lecturer taps a class
+  /// from the timetable, this is the week they were viewing. Null → defaults to
+  /// the current calendar week.
+  final int? initialWeek;
+
   /// Legacy parameter kept for AppShell's deep-link compatibility. Ignored
   /// by the new grid flow.
   final String? initialSlotId;
@@ -36,6 +41,7 @@ class AmbilKehadiranScreen extends ConsumerStatefulWidget {
     this.subjectName,
     this.studentClass,
     this.program,
+    this.initialWeek,
     this.initialSlotId,
   });
 
@@ -51,6 +57,10 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
   String? _program;
   int _selectedWeek = 0; // 0-indexed (M1 = 0)
 
+  /// Guards the one-shot "default everyone present" seeding per (class × week).
+  String? _seededFor;
+  bool _seeding = false;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +68,10 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
     _subjectName = widget.subjectName;
     _studentClass = widget.studentClass;
     _program = widget.program;
+    // Open on the week the lecturer tapped from the timetable (1-based), else
+    // fall back to the current calendar week. Stored 0-indexed (M1 = 0).
+    _selectedWeek = ((widget.initialWeek ?? Semester.currentWeek) - 1)
+        .clamp(0, ClassAttendance.weeksPerSemester - 1);
   }
 
   bool get _hasContext =>
@@ -65,6 +79,38 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
       _studentClass != null &&
       _subjectCode!.isNotEmpty &&
       _studentClass!.isNotEmpty;
+
+  /// Marks every blank cell in the active week as "Hadir" so the grid opens
+  /// with all students present by default; the lecturer then toggles only the
+  /// absentees. Runs once per (class × week); other weeks are left untouched.
+  void _scheduleDefaultPresent(
+    AttendanceService attendance,
+    ClassAttendance current,
+    List<StudentModel> students,
+  ) {
+    if (students.isEmpty) return;
+    final key = '${_subjectCode}_${_studentClass}_$_selectedWeek';
+    if (_seededFor == key || _seeding) return;
+    final hasBlank = students.any((s) =>
+        current.statusFor(s.id, _selectedWeek) == AttendanceStatus.belum);
+    if (!hasBlank) {
+      _seededFor = key; // already complete — don't re-check on every rebuild
+      return;
+    }
+    _seeding = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      var updated = current;
+      for (final s in students) {
+        if (updated.statusFor(s.id, _selectedWeek) == AttendanceStatus.belum) {
+          updated =
+              updated.withCell(s.id, _selectedWeek, AttendanceStatus.hadir);
+        }
+      }
+      await attendance.saveClassAttendance(updated);
+      _seededFor = key;
+      _seeding = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +201,9 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
     final db = ref.watch(mockDbProvider);
     final auth = ref.watch(authProvider);
     final user = auth.currentUser!;
-    final attendance = ref.watch(attendanceServiceProvider);
+    // read (not watch): the StreamBuilder + Firestore already drive reactivity,
+    // so saves must NOT trigger a parent rebuild that re-subscribes the stream.
+    final attendance = ref.read(attendanceServiceProvider);
 
     final students = db.getStudentsForClass(
       _studentClass!,
@@ -168,6 +216,11 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
         studentClass: _studentClass!,
       ),
       builder: (ctx, snap) {
+        // Wait for the real document before rendering or seeding. Acting on the
+        // empty placeholder during load would overwrite previously-saved weeks.
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final ClassAttendance current = snap.data ??
             ClassAttendance.empty(
               subjectCode: _subjectCode!,
@@ -177,6 +230,10 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
               lecturerId: user.id,
               lecturerName: user.name,
             );
+
+        // Default every student to "Hadir" for the active week so no box is
+        // left blank — the lecturer only toggles the absentees afterwards.
+        _scheduleDefaultPresent(attendance, current, students);
 
         return Column(
           children: [
@@ -196,10 +253,10 @@ class _AmbilKehadiranScreenState extends ConsumerState<AmbilKehadiranScreen> {
             ),
             _WeekStrip(
               selected: _selectedWeek,
-              onChanged: (w) => setState(() => _selectedWeek = w),
               current: current,
               studentCount: students.length,
             ),
+            _CurrentWeekBanner(week: _selectedWeek + 1),
             const SizedBox(height: 4),
             Expanded(
               child: students.isEmpty
@@ -348,12 +405,10 @@ class _MiniChip extends StatelessWidget {
 
 class _WeekStrip extends StatelessWidget {
   final int selected;
-  final ValueChanged<int> onChanged;
   final ClassAttendance current;
   final int studentCount;
   const _WeekStrip({
     required this.selected,
-    required this.onChanged,
     required this.current,
     required this.studentCount,
   });
@@ -373,49 +428,102 @@ class _WeekStrip extends StatelessWidget {
             if (i < list.length && list[i].isNotEmpty) marked++;
           });
           final pct = studentCount == 0 ? 0 : (marked * 100 ~/ studentCount);
-          return GestureDetector(
-            onTap: () => onChanged(i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 56,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
+          final chip = AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 56,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? EHadirTheme.primary
+                  : EHadirTheme.surfaceLight,
+              borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
+              border: Border.all(
                 color: isSelected
                     ? EHadirTheme.primary
-                    : EHadirTheme.surfaceLight,
-                borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
-                border: Border.all(
-                  color: isSelected
-                      ? EHadirTheme.primary
-                      : EHadirTheme.divider,
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('M${i + 1}',
-                      style: TextStyle(
-                          color: isSelected
-                              ? Colors.white
-                              : EHadirTheme.textPrimary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                          height: 1.1)),
-                  Text('$pct%',
-                      style: TextStyle(
-                          color: isSelected
-                              ? Colors.white70
-                              : EHadirTheme.textSecondary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          height: 1.1)),
-                ],
+                    : EHadirTheme.divider,
+                width: isSelected ? 2 : 1,
               ),
             ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('M${i + 1}',
+                    style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : EHadirTheme.textPrimary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        height: 1.1)),
+                // The active (selected) week is the editable one — badge it
+                // "KINI"; the rest show their completion %.
+                isSelected
+                    ? Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text('KINI',
+                            style: TextStyle(
+                                color: EHadirTheme.primary,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                                height: 1.1)),
+                      )
+                    : Text('$pct%',
+                        style: const TextStyle(
+                            color: EHadirTheme.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            height: 1.1)),
+              ],
+            ),
           );
+          // Navigation is disabled: the active week is shown crisply, every
+          // other week is dimmed and non-interactive (no tap handler).
+          return isSelected ? chip : Opacity(opacity: 0.4, child: chip);
         },
+      ),
+    );
+  }
+}
+
+/// Slim banner telling the lecturer which week is currently editable.
+class _CurrentWeekBanner extends StatelessWidget {
+  final int week;
+  const _CurrentWeekBanner({required this.week});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: EHadirTheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(EHadirTheme.radiusMd),
+        border: Border.all(color: EHadirTheme.primary.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_rounded,
+              color: EHadirTheme.primary, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Sedang menanda kehadiran untuk Minggu $week. '
+              'Minggu lain dikunci untuk kelas ini.',
+              style: const TextStyle(
+                  color: EHadirTheme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -518,6 +626,7 @@ class _AttendanceMatrix extends StatelessWidget {
                       DataCell(_StatusCell(
                         status: attendance.statusFor(s.id, w),
                         highlight: w == selectedWeek,
+                        enabled: w == selectedWeek,
                         onCycle: (next) => onCellChanged(s, w, next),
                       )),
                     DataCell(
@@ -556,16 +665,19 @@ class _AttendanceMatrix extends StatelessWidget {
 class _StatusCell extends StatelessWidget {
   final AttendanceStatus status;
   final bool highlight;
+  final bool enabled;
   final ValueChanged<AttendanceStatus> onCycle;
 
   const _StatusCell({
     required this.status,
     required this.highlight,
+    required this.enabled,
     required this.onCycle,
   });
 
+  // Tap cycle never lands on "belum" so the active week stays fully marked.
+  // (Long-press still exposes every status, incl. clearing, as an override.)
   static const _cycle = [
-    AttendanceStatus.belum,
     AttendanceStatus.hadir,
     AttendanceStatus.tidakHadir,
     AttendanceStatus.mc,
@@ -574,6 +686,7 @@ class _StatusCell extends StatelessWidget {
 
   AttendanceStatus _next(AttendanceStatus s) {
     final idx = _cycle.indexOf(s);
+    // Unknown/blank → start the cycle at Hadir.
     return _cycle[(idx + 1) % _cycle.length];
   }
 
@@ -602,32 +715,45 @@ class _StatusCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final empty = status == AttendanceStatus.belum;
+    // Disabled (non-current week) cells are read-only: muted colours, no taps.
+    final box = Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: empty
+            ? (enabled
+                ? Colors.transparent
+                : EHadirTheme.surfaceLight.withValues(alpha: 0.5))
+            : status.color.withValues(alpha: enabled ? 0.15 : 0.07),
+        border: Border.all(
+          color: !enabled
+              ? EHadirTheme.divider
+              : highlight
+                  ? EHadirTheme.primary
+                  : status.color.withValues(alpha: empty ? 0.3 : 0.5),
+          width: highlight && enabled ? 1.5 : 1,
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        empty ? '–' : status.code,
+        style: TextStyle(
+          color: empty
+              ? EHadirTheme.textSecondary.withValues(alpha: enabled ? 1 : 0.5)
+              : status.color.withValues(alpha: enabled ? 1 : 0.55),
+          fontWeight: FontWeight.w800,
+          fontSize: 11,
+        ),
+      ),
+    );
+
+    if (!enabled) return box;
+
     return GestureDetector(
       onTap: () => onCycle(_next(status)),
       onLongPress: () => _openPopup(context),
-      child: Container(
-        width: 34,
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: empty ? Colors.transparent : status.color.withValues(alpha: 0.15),
-          border: Border.all(
-            color: highlight
-                ? EHadirTheme.primary
-                : status.color.withValues(alpha: empty ? 0.3 : 0.5),
-            width: highlight ? 1.5 : 1,
-          ),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          empty ? '–' : status.code,
-          style: TextStyle(
-            color: empty ? EHadirTheme.textSecondary : status.color,
-            fontWeight: FontWeight.w800,
-            fontSize: 11,
-          ),
-        ),
-      ),
+      child: box,
     );
   }
 }

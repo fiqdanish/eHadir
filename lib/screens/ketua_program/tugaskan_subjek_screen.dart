@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/department.dart';
 import '../../models/lecturer_assignment.dart';
 import '../../models/subject.dart';
 import '../../models/user.dart';
@@ -9,8 +10,9 @@ import '../../services/mock_db_service.dart';
 import '../../services/seed_data.dart';
 import '../../theme.dart';
 
-/// Ketua Program: list lecturers in the KP's program, pick subjects from
-/// the program catalog to assign each lecturer, then save to Firestore.
+/// Ketua Jabatan: list every lecturer in the department, pick subjects from
+/// each lecturer's program catalog to assign them, then save to Firestore.
+/// The Ketua Program later places these assignments on the weekly timetable.
 class TugaskanSubjekScreen extends ConsumerStatefulWidget {
   const TugaskanSubjekScreen({super.key});
 
@@ -54,10 +56,12 @@ class _TugaskanSubjekScreenState extends ConsumerState<TugaskanSubjekScreen> {
     final user = ref.watch(authProvider).currentUser!;
     final db = ref.watch(mockDbProvider);
 
-    // Only lecturers in the same program as the Ketua Program
+    // Every lecturer whose program belongs to this Ketua Jabatan's department.
+    final programKeys = Department.programsOf[user.program] ?? const [];
     final lecturers = db.users
         .where((u) =>
-            u.role == UserRole.pensyarah && u.program == user.program)
+            u.role == UserRole.pensyarah &&
+            programKeys.contains(Department.programKeyOf(u.program)))
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
@@ -69,7 +73,8 @@ class _TugaskanSubjekScreenState extends ConsumerState<TugaskanSubjekScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                _ProgramHeader(program: user.program, lecturerCount: lecturers.length),
+                _ProgramHeader(
+                    program: user.program, lecturerCount: lecturers.length),
                 if (lecturers.isEmpty)
                   const Expanded(child: _EmptyLecturerHint())
                 else
@@ -111,7 +116,7 @@ class _ProgramHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('PROGRAM',
+          const Text('JABATAN',
               style: TextStyle(
                   color: Colors.white70,
                   fontSize: 11,
@@ -339,7 +344,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                           fontSize: 16,
                           color: EHadirTheme.textPrimary)),
                   const SizedBox(height: 4),
-                  Text(widget.kp.program,
+                  Text(widget.lecturer.program,
                       style: const TextStyle(
                           color: EHadirTheme.textSecondary, fontSize: 12),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -349,7 +354,8 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
             ),
             Expanded(
               child: StreamBuilder<List<Subject>>(
-                stream: curriculum.streamSubjectsForProgram(widget.kp.program),
+                stream:
+                    curriculum.streamSubjectsForProgram(widget.lecturer.program),
                 builder: (ctx, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -452,8 +458,9 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
   }
 
   Future<void> _save(CurriculumService curriculum) async {
-    // Look up the chosen subjects from a one-off fetch.
-    final subjects = await curriculum.getSubjectsForPrograms([widget.kp.program]);
+    // Look up the chosen subjects from a one-off fetch (the lecturer's program).
+    final subjects =
+        await curriculum.getSubjectsForPrograms([widget.lecturer.program]);
     final chosen = subjects.where((s) => _selectedCodes.contains(s.code));
 
     for (final s in chosen) {
@@ -463,7 +470,9 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
         lecturerName: widget.lecturer.name,
         subjectCode: s.code,
         subjectName: s.name,
-        program: widget.kp.program,
+        // Store the subject's real program (e.g. "DED …") so the Ketua Program
+        // sees it when building their program's timetable.
+        program: s.program,
         studentClass: s.studentClass,
         assignedBy: widget.kp.id,
       );
@@ -497,7 +506,7 @@ class _EmptyLecturerHint extends StatelessWidget {
                   color: EHadirTheme.textSecondary.withValues(alpha: 0.3)),
               const SizedBox(height: 16),
               const Text(
-                'Tiada pensyarah dalam program ini.',
+                'Tiada pensyarah dalam jabatan ini.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: EHadirTheme.textSecondary),
               ),

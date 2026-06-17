@@ -58,8 +58,10 @@ class ReportingService {
     return out;
   }
 
-  /// At-risk students for one class (< [atRiskThreshold] %).
-  Stream<List<AtRiskStudent>> classAtRiskStudents({
+  /// Every student in this class who has at least one marked session,
+  /// with their attendance percentage. Sorted ascending so the UI can
+  /// just slice off a tier (e.g. < 95% / < 90% / < 80%) without resorting.
+  Stream<List<AtRiskStudent>> classStudentPercentages({
     required String subjectCode,
     required String studentClass,
     required Map<String, String> studentNames, // sid → name
@@ -75,12 +77,12 @@ class ReportingService {
       c.weeks.forEach((sid, list) {
         if (list.every((e) => e.isEmpty)) return;
         final pct = c.percentageFor(sid);
-        if (pct >= atRiskThreshold) return;
         final absent = list.where((e) => e == 'T').length;
         out.add(AtRiskStudent(
           studentId: sid,
           studentName: studentNames[sid] ?? sid,
           subjectName: c.subjectName,
+          subjectCode: c.subjectCode,
           studentClass: c.studentClass,
           percentage: pct,
           absentCount: absent,
@@ -184,9 +186,10 @@ class ReportingService {
     });
   }
 
-  /// At-risk students for an entire program. Requires a name lookup keyed
-  /// by student id.
-  Stream<List<AtRiskStudent>> programAtRiskStudents({
+  /// Every student×class pair in the program with at least one marked
+  /// session, plus their attendance percentage. Sorted ascending so the
+  /// UI can slice tiers (< 95% / < 90% / < 80%) without resorting.
+  Stream<List<AtRiskStudent>> programStudentPercentages({
     required String program,
     required Map<String, String> studentNames,
   }) {
@@ -201,11 +204,11 @@ class ReportingService {
         c.weeks.forEach((sid, list) {
           if (list.every((e) => e.isEmpty)) return;
           final pct = c.percentageFor(sid);
-          if (pct >= atRiskThreshold) return;
           out.add(AtRiskStudent(
             studentId: sid,
             studentName: studentNames[sid] ?? sid,
             subjectName: c.subjectName,
+            subjectCode: c.subjectCode,
             studentClass: c.studentClass,
             percentage: pct,
             absentCount: list.where((e) => e == 'T').length,
@@ -270,6 +273,7 @@ class AtRiskStudent {
   final String studentId;
   final String studentName;
   final String subjectName;
+  final String subjectCode;
   final String studentClass;
   final double percentage;
   final int absentCount;
@@ -278,6 +282,7 @@ class AtRiskStudent {
     required this.studentId,
     required this.studentName,
     required this.subjectName,
+    required this.subjectCode,
     required this.studentClass,
     required this.percentage,
     required this.absentCount,

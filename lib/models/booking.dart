@@ -11,6 +11,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///   - `date`        : Firestore Timestamp (normalised to midnight)
 ///   - `startTime`   : int — minutes from midnight (e.g. 09:00 = 540)
 ///   - `endTime`     : int — minutes from midnight (e.g. 11:00 = 660)
+///   - `subjectCode` : Subject code (e.g. "SECJ1013")
+///   - `studentClass`: Student class/group (e.g. "DED 1A")
+///   - `program`     : Program name (e.g. "DCP — Diploma Kompetensi Elektrik (Kuasa)")
 class FirestoreBooking {
   final String id;
   final String subjectName;
@@ -20,6 +23,9 @@ class FirestoreBooking {
   final DateTime date;
   final int startTime; // minutes from midnight
   final int endTime;   // minutes from midnight
+  final String subjectCode;
+  final String studentClass;
+  final String program;
 
   FirestoreBooking({
     required this.id,
@@ -30,6 +36,9 @@ class FirestoreBooking {
     required this.date,
     required this.startTime,
     required this.endTime,
+    required this.subjectCode,
+    required this.studentClass,
+    required this.program,
   });
 
   /// Convert a Firestore document snapshot → [FirestoreBooking].
@@ -44,6 +53,9 @@ class FirestoreBooking {
       date: (d['date'] as Timestamp).toDate(),
       startTime: d['startTime'] ?? 0,
       endTime: d['endTime'] ?? 0,
+      subjectCode: d['subjectCode'] ?? '',
+      studentClass: d['studentClass'] ?? '',
+      program: d['program'] ?? '',
     );
   }
 
@@ -58,6 +70,9 @@ class FirestoreBooking {
         ),
         'startTime': startTime,
         'endTime': endTime,
+        'subjectCode': subjectCode,
+        'studentClass': studentClass,
+        'program': program,
         'createdAt': FieldValue.serverTimestamp(),
       };
 

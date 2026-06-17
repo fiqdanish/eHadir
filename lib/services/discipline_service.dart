@@ -157,7 +157,7 @@ class DisciplineService extends ChangeNotifier {
         .map(_mapAndSort);
   }
 
-  /// All reports across every program (KJ feed).
+  /// All reports across every program (KJ / TPA feed).
   Stream<List<DisciplineReportModel>> streamAll() {
     return _col.snapshots().map(_mapAndSort);
   }

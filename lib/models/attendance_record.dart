@@ -97,13 +97,18 @@ class ClassAttendance {
     return AttendanceStatusX.fromCode(list[week]);
   }
 
+  /// Attendance % using a 100%-down model: everyone starts at 100% and each
+  /// `T` (Tidak Hadir) deducts `1 / weeksPerSemester`. MC and CK are excused
+  /// and don't deduct; blank weeks (not yet taken) don't deduct either.
+  ///
+  /// This matches the absenteeism warning engine (which also keys off T only)
+  /// and the Malaysian polytechnic 80% rule for unexcused absences.
   double percentageFor(String studentId) {
     final list = weeks[studentId];
-    if (list == null || list.isEmpty) return 0.0;
-    final taken = list.where((s) => s.isNotEmpty).length;
-    if (taken == 0) return 0.0;
-    final present = list.where((s) => s == 'H').length;
-    return (present / taken) * 100;
+    if (list == null || list.isEmpty) return 100.0;
+    final absent = list.where((s) => s == 'T').length;
+    final pct = (1 - absent / weeksPerSemester) * 100;
+    return pct.clamp(0.0, 100.0);
   }
 
   ClassAttendance withCell(String studentId, int week, AttendanceStatus s) {
@@ -182,6 +187,33 @@ class ClassAttendance {
         'weeks': weeks,
         'updatedAt': FieldValue.serverTimestamp(),
       };
+}
+
+/// Shared academic-calendar helper. One semester runs for [totalWeeks]
+/// teaching weeks (M1–M14), anchored to the Monday of Week 1. Both the weekly
+/// timetable and the attendance grid use this so they always agree on which
+/// calendar week maps to which teaching week.
+class Semester {
+  /// 14 teaching weeks — same as [ClassAttendance.weeksPerSemester].
+  static const int totalWeeks = ClassAttendance.weeksPerSemester;
+
+  /// Monday of Week 1 — SESI JAN–JUN 2026.
+  static final DateTime week1Monday = DateTime(2026, 6, 8);
+
+  /// Monday of [week] (1-based).
+  static DateTime mondayOfWeek(int week) =>
+      week1Monday.add(Duration(days: (week - 1) * 7));
+
+  /// The teaching week (1-based) that contains [date], clamped to 1..totalWeeks.
+  static int weekIndexOf(DateTime date) {
+    final monday =
+        DateTime(date.year, date.month, date.day - (date.weekday - 1));
+    final weeks = monday.difference(week1Monday).inDays ~/ 7;
+    return (weeks + 1).clamp(1, totalWeeks);
+  }
+
+  /// Current teaching week (1-based), clamped to range.
+  static int get currentWeek => weekIndexOf(DateTime.now());
 }
 
 /// One Firestore document per class slot session.

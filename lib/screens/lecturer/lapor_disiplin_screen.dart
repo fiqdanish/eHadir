@@ -14,7 +14,20 @@ class LaporDisiplinScreen extends ConsumerStatefulWidget {
   /// is still `pending`.
   final DisciplineReportModel? existing;
 
-  const LaporDisiplinScreen({super.key, this.existing});
+  /// Pre-select a student when the form opens (e.g. when launched from
+  /// the "Pelajar Berisiko" list in M3). Ignored when [existing] is set,
+  /// since edit mode already restores the report's student.
+  final String? prefilledStudentId;
+  final String? prefilledStudentName;
+  final String? prefilledStudentClass;
+
+  const LaporDisiplinScreen({
+    super.key,
+    this.existing,
+    this.prefilledStudentId,
+    this.prefilledStudentName,
+    this.prefilledStudentClass,
+  });
 
   @override
   ConsumerState<LaporDisiplinScreen> createState() => _LaporDisiplinScreenState();
@@ -43,6 +56,10 @@ class _LaporDisiplinScreenState extends ConsumerState<LaporDisiplinScreen> {
       _selectedStudentClass = e.studentClass;
       _selectedSeverity = e.severityLevel;
       _descCtrl.text = e.issueDescription;
+    } else if (widget.prefilledStudentId != null) {
+      _selectedStudentId = widget.prefilledStudentId;
+      _selectedStudentName = widget.prefilledStudentName;
+      _selectedStudentClass = widget.prefilledStudentClass ?? '';
     }
   }
 

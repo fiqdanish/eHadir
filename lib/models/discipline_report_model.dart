@@ -179,6 +179,8 @@ class DisciplineReportModel {
     );
   }
 
+  // ─── Firestore ────────────────────────────────────────────
+
   factory DisciplineReportModel.fromFirestore(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
     return DisciplineReportModel(

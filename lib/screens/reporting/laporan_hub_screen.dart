@@ -1,47 +1,65 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/user.dart';
+import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../lecturer/sejarah_disiplin_screen.dart';
 import 'reporting_screen.dart';
 
-/// The bottom-nav "Laporan" hub. Two segments:
-///   • Statistik  → Module 3 (Reporting Module)
-///   • Lapor      → Module 2 (Discipline reporting form)
-class LaporanHubScreen extends StatefulWidget {
-  /// 0 → Statistik, 1 → Lapor Disiplin.
+/// The bottom-nav "Laporan" hub.
+///
+/// Role behaviour:
+///   • Pensyarah     → segmented control with two tabs:
+///                       0 — Statistik (Module 3)
+///                       1 — Lapor Disiplin (Module 2 history + new-report FAB)
+///   • Everyone else → single Statistik panel (no segments, no second tab)
+///
+/// Only Pensyarah may file discipline reports, so the second segment is hidden
+/// for KP / KJ / TPA / Admin. KP and KJ reach their own review/action screens
+/// directly from their dashboards instead.
+class LaporanHubScreen extends ConsumerStatefulWidget {
+  /// 0 → Statistik, 1 → Lapor Disiplin. Ignored for non-Pensyarah users.
   final int initialTab;
   const LaporanHubScreen({super.key, this.initialTab = 0});
 
   @override
-  State<LaporanHubScreen> createState() => _LaporanHubScreenState();
+  ConsumerState<LaporanHubScreen> createState() => _LaporanHubScreenState();
 }
 
-class _LaporanHubScreenState extends State<LaporanHubScreen> {
+class _LaporanHubScreenState extends ConsumerState<LaporanHubScreen> {
   late int _tab = widget.initialTab.clamp(0, 1);
 
   @override
   Widget build(BuildContext context) {
+    final user = ref.watch(authProvider).currentUser;
+    final isPensyarah = user?.role == UserRole.pensyarah;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Laporan'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(58),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: _SegmentedTabs(
-              selected: _tab,
-              onChanged: (i) => setState(() => _tab = i),
-            ),
-          ),
-        ),
+        bottom: isPensyarah
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(58),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: _SegmentedTabs(
+                    selected: _tab,
+                    onChanged: (i) => setState(() => _tab = i),
+                  ),
+                ),
+              )
+            : null,
       ),
-      body: IndexedStack(
-        index: _tab,
-        children: const [
-          ReportingScreen(),
-          SejarahDisiplinScreen(),
-        ],
-      ),
+      body: isPensyarah
+          ? IndexedStack(
+              index: _tab,
+              children: const [
+                ReportingScreen(),
+                SejarahDisiplinScreen(),
+              ],
+            )
+          : const ReportingScreen(),
     );
   }
 }

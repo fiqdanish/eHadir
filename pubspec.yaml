@@ -40,6 +40,10 @@ dependencies:
   shared_preferences: ^2.5.5
   fl_chart: ^1.2.0
 
+  # PDF generation (Surat Amaran)
+  pdf: ^3.11.1
+  printing: ^5.13.2
+
   # Firebase
   firebase_core: ^3.13.1
   firebase_auth: ^5.5.2

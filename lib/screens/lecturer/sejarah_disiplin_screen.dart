@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../models/discipline_report_model.dart';
+import '../../models/user.dart';
 import '../../services/auth_service.dart';
 import '../../services/discipline_service.dart';
 import '../../theme.dart';
@@ -16,18 +17,21 @@ class SejarahDisiplinScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final current = ref.watch(authProvider).currentUser!;
     final service = ref.watch(disciplineServiceProvider);
+    final canCreate = current.role == UserRole.pensyarah;
 
     return Scaffold(
       // No AppBar — this screen is normally embedded inside the
       // LaporanHubScreen which already provides the bar + segmented tabs.
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const LaporDisiplinScreen()),
-        ),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Laporan Baru'),
-      ),
+      floatingActionButton: canCreate
+          ? FloatingActionButton.extended(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LaporDisiplinScreen()),
+              ),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Laporan Baru'),
+            )
+          : null,
       body: StreamBuilder<List<DisciplineReportModel>>(
         stream: service.streamByLecturer(current.id),
         builder: (context, snap) {
@@ -49,10 +53,13 @@ class SejarahDisiplinScreen extends ConsumerWidget {
           final reports = snap.data ?? const [];
           if (reports.isEmpty) {
             return _EmptyState(
-              onCreate: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const LaporDisiplinScreen()),
-              ),
+              onCreate: canCreate
+                  ? () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const LaporDisiplinScreen()),
+                      )
+                  : null,
             );
           }
           return ListView.separated(
@@ -76,7 +83,7 @@ class SejarahDisiplinScreen extends ConsumerWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  final VoidCallback onCreate;
+  final VoidCallback? onCreate;
   const _EmptyState({required this.onCreate});
 
   @override
@@ -109,17 +116,21 @@ class _EmptyState extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Tekan butang di bawah untuk membuat laporan disiplin baru.',
+            Text(
+              onCreate == null
+                  ? 'Tiada laporan untuk dipaparkan.'
+                  : 'Tekan butang di bawah untuk membuat laporan disiplin baru.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: EHadirTheme.textSecondary),
+              style: const TextStyle(color: EHadirTheme.textSecondary),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: onCreate,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Laporan Baru'),
-            ),
+            if (onCreate != null) ...[
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: onCreate,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Laporan Baru'),
+              ),
+            ],
           ],
         ),
       ),

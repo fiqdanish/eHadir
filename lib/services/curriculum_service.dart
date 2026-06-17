@@ -101,6 +101,20 @@ class CurriculumService extends ChangeNotifier {
             .toList());
   }
 
+  /// All assignments for a single program, matched by program *key* (e.g.
+  /// "DED") so it's robust to small differences in the full program label.
+  /// Used by the Ketua Program when building their program's timetable.
+  Stream<List<LecturerAssignment>> streamAssignmentsForProgramKey(
+      String programKey) {
+    return _db
+        .collection(_assignmentsCol)
+        .snapshots()
+        .map((s) => s.docs
+            .map(LecturerAssignment.fromFirestore)
+            .where((a) => Department.programKeyOf(a.program) == programKey)
+            .toList());
+  }
+
   Future<String> upsertAssignment(LecturerAssignment a) async {
     if (a.id.isNotEmpty) {
       await _db.collection(_assignmentsCol).doc(a.id).set(a.toFirestore());
