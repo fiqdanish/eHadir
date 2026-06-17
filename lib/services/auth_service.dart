@@ -33,6 +33,14 @@ class AuthService extends ChangeNotifier {
       return;
     }
     await _loadUserProfile(firebaseUser.uid);
+
+    // Sign out silently if no profile found or account not yet approved
+    if (_currentUser == null || !_currentUser!.isApproved) {
+      _currentUser = null;
+      await _auth.signOut(); // triggers _onAuthStateChanged(null) which calls notifyListeners
+      return;
+    }
+
     _loading = false;
     notifyListeners();
   }
@@ -60,6 +68,17 @@ class AuthService extends ChangeNotifier {
         password: password,
       );
       await _loadUserProfile(cred.user!.uid);
+
+      if (_currentUser == null) {
+        await _auth.signOut();
+        return 'Akaun tidak dijumpai. Sila hubungi admin.';
+      }
+      if (!_currentUser!.isApproved) {
+        await _auth.signOut();
+        _currentUser = null;
+        return 'Akaun anda sedang menunggu kelulusan admin.';
+      }
+
       notifyListeners();
       return null; // success
     } on FirebaseAuthException catch (e) {
@@ -98,16 +117,35 @@ class AuthService extends ChangeNotifier {
         role: role,
         program: program,
         passwordHash: hash,
+        isApproved: false, // pending until admin approves
       );
 
       await _db.collection('users').doc(uid).set(user.toFirestore());
-      _currentUser = user;
-      notifyListeners();
-      return null; // success
+
+      // Sign out immediately — the user cannot access the app until approved
+      await _auth.signOut();
+      _currentUser = null;
+      return null; // success (pending)
     } on FirebaseAuthException catch (e) {
       return _mapAuthError(e.code);
     } catch (e) {
       return 'Ralat pendaftaran. Sila cuba lagi.';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  FORGOT PASSWORD
+  // ═══════════════════════════════════════════════════════════
+
+  /// Sends a Firebase password-reset email. Returns null on success or an error string.
+  Future<String?> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      return null; // success
+    } on FirebaseAuthException catch (e) {
+      return _mapAuthError(e.code);
+    } catch (e) {
+      return 'Ralat tidak dijangka. Sila cuba lagi.';
     }
   }
 
@@ -147,6 +185,27 @@ class AuthService extends ChangeNotifier {
       return null;
     } catch (e) {
       return 'Gagal mengemaskini profil.';
+    }
+  }
+
+  /// Approve a pending registration — sets isApproved: true.
+  Future<String?> approveUser(String uid) async {
+    try {
+      await _db.collection('users').doc(uid).update({'isApproved': true});
+      return null;
+    } catch (e) {
+      return 'Gagal meluluskan pengguna.';
+    }
+  }
+
+  /// Reject a pending registration — deletes the Firestore profile.
+  /// The Firebase Auth account remains but the user cannot log in without a profile.
+  Future<String?> rejectUser(String uid) async {
+    try {
+      await _db.collection('users').doc(uid).delete();
+      return null;
+    } catch (e) {
+      return 'Gagal menolak pengguna.';
     }
   }
 

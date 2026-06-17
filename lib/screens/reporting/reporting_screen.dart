@@ -35,17 +35,12 @@ class ReportingScreen extends ConsumerWidget {
     if (user == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    switch (user.role) {
-      case UserRole.pensyarah:
-        return _PensyarahReport(user: user);
-      case UserRole.ketuaProgram:
-        return _KetuaProgramReport(user: user);
-      case UserRole.ketuaJabatan:
-        return _KetuaJabatanReport(user: user);
-      case UserRole.timbalanPengarahAkademik:
-      case UserRole.admin:
-        return const _TPAReport();
-    }
+    return switch (user.role) {
+      UserRole.pensyarah => _PensyarahReport(user: user),
+      UserRole.ketuaProgram => _KetuaProgramReport(user: user),
+      UserRole.ketuaJabatan => _KetuaJabatanReport(user: user),
+      UserRole.timbalanPengarahAkademik || UserRole.admin => const _TPAReport(),
+    };
   }
 }
 
