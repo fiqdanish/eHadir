@@ -1239,8 +1239,25 @@ class _DisciplineBreakdownSectionState
     extends State<_DisciplineBreakdownSection> {
   SeverityLevel? _filter;
   bool _expanded = true;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
 
   static const _maxCollapsed = 3;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matches(DisciplineReportModel r, String q) {
+    if (q.isEmpty) return true;
+    final n = q.toLowerCase();
+    return r.studentName.toLowerCase().contains(n) ||
+        r.issueDescription.toLowerCase().contains(n) ||
+        r.reportedByName.toLowerCase().contains(n) ||
+        r.studentClass.toLowerCase().contains(n);
+  }
 
   Color _colorFor(SeverityLevel s) {
     switch (s) {
@@ -1274,9 +1291,11 @@ class _DisciplineBreakdownSectionState
         .where((r) => r.severityLevel == SeverityLevel.serius)
         .length;
 
-    final filtered = _filter == null
-        ? reports
-        : reports.where((r) => r.severityLevel == _filter).toList();
+    // Compose severity filter + free-text search.
+    final filtered = reports.where((r) {
+      if (_filter != null && r.severityLevel != _filter) return false;
+      return _matches(r, _query);
+    }).toList();
     final visible = _expanded || filtered.length <= _maxCollapsed
         ? filtered
         : filtered.take(_maxCollapsed).toList();
@@ -1404,12 +1423,30 @@ class _DisciplineBreakdownSectionState
             ),
           ),
 
+          // ─── Search bar (only when the unsearched list is long) ──
+          if (reports.length > 3)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: _SearchField(
+                controller: _searchCtrl,
+                hint: 'Cari nama pelajar, keterangan, atau pensyarah…',
+                onChanged: (v) => setState(() {
+                  _query = v.trim();
+                  _expanded = true;
+                }),
+              ),
+            ),
+
           // ─── Reports list ─────────────────────────────────
           if (filtered.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
               child: Text(
-                'Tiada laporan ${_filter!.label.toLowerCase()}.',
+                _query.isNotEmpty
+                    ? 'Tiada laporan sepadan dengan "$_query".'
+                    : _filter != null
+                        ? 'Tiada laporan ${_filter!.label.toLowerCase()}.'
+                        : 'Tiada laporan.',
                 style: const TextStyle(
                     color: EHadirTheme.textSecondary, fontSize: 12),
               ),
@@ -1964,7 +2001,7 @@ class _ProgramAtRiskCardState extends ConsumerState<_ProgramAtRiskCard> {
 /// Shared body for both Pensyarah ([_AtRiskCard]) and KP ([_ProgramAtRiskCard])
 /// at-risk sections. Renders the three-tier chip row (with counts) and the
 /// filtered student list below.
-class _TieredAtRiskBody extends StatelessWidget {
+class _TieredAtRiskBody extends StatefulWidget {
   /// All marked students with their %, sorted ascending.
   final List<AtRiskStudent> all;
   final double threshold;
@@ -1976,31 +2013,73 @@ class _TieredAtRiskBody extends StatelessWidget {
     required this.onThresholdChanged,
   });
 
+  @override
+  State<_TieredAtRiskBody> createState() => _TieredAtRiskBodyState();
+}
+
+class _TieredAtRiskBodyState extends State<_TieredAtRiskBody> {
   // Three tier cutoffs, strict less-than. Counts are cumulative —
   // "<95%" includes everyone below 90% and below 80% too.
   static const _tiers = [95.0, 90.0, 80.0];
 
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matches(AtRiskStudent s, String q) {
+    if (q.isEmpty) return true;
+    final n = q.toLowerCase();
+    return s.studentName.toLowerCase().contains(n) ||
+        s.studentClass.toLowerCase().contains(n) ||
+        s.subjectName.toLowerCase().contains(n);
+  }
+
   @override
   Widget build(BuildContext context) {
     final counts = {
-      for (final t in _tiers) t: all.where((s) => s.percentage < t).length,
+      for (final t in _tiers)
+        t: widget.all.where((s) => s.percentage < t).length,
     };
-    final filtered = all.where((s) => s.percentage < threshold).toList();
+    final filtered = widget.all
+        .where((s) => s.percentage < widget.threshold && _matches(s, _query))
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _ThresholdChips(
-          selected: threshold,
+          selected: widget.threshold,
           counts: counts,
-          onChanged: onThresholdChanged,
+          onChanged: widget.onThresholdChanged,
         ),
         const SizedBox(height: 10),
+        // Show the search bar only once at least one student would be in
+        // the visible tier — otherwise it just adds noise to an empty card.
+        if (widget.all.where((s) => s.percentage < widget.threshold).length >
+            3) ...[
+          _SearchField(
+            controller: _searchCtrl,
+            hint: 'Cari nama pelajar, kelas, atau subjek…',
+            onChanged: (v) => setState(() => _query = v.trim()),
+          ),
+          const SizedBox(height: 10),
+        ],
         if (filtered.isEmpty)
           _InfoCard(
-            color: EHadirTheme.approved,
-            icon: Icons.check_circle_rounded,
-            text: 'Tiada pelajar di bawah ${threshold.toInt()}%.',
+            color: _query.isEmpty
+                ? EHadirTheme.approved
+                : EHadirTheme.textSecondary,
+            icon: _query.isEmpty
+                ? Icons.check_circle_rounded
+                : Icons.search_off_rounded,
+            text: _query.isEmpty
+                ? 'Tiada pelajar di bawah ${widget.threshold.toInt()}%.'
+                : 'Tiada pelajar sepadan dengan "$_query".',
           )
         else
           _AtRiskList(items: filtered),
@@ -2348,6 +2427,74 @@ class _AtRiskActionsMenuState extends ConsumerState<_AtRiskActionsMenu> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Compact search field shared by the at-risk list and the discipline
+/// reports list. Single-line, soft surface, clear button when non-empty.
+class _SearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String> onChanged;
+  const _SearchField({
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      textInputAction: TextInputAction.search,
+      style: const TextStyle(fontSize: 13, color: EHadirTheme.textPrimary),
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: EHadirTheme.surfaceLight,
+        hintText: hint,
+        hintStyle: const TextStyle(
+            fontSize: 13, color: EHadirTheme.textSecondary),
+        prefixIcon: const Icon(Icons.search_rounded,
+            size: 18, color: EHadirTheme.textSecondary),
+        prefixIconConstraints:
+            const BoxConstraints(minWidth: 36, minHeight: 36),
+        suffixIcon: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: controller,
+          builder: (_, value, _) => value.text.isEmpty
+              ? const SizedBox.shrink()
+              : GestureDetector(
+                  onTap: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Icon(Icons.close_rounded,
+                        size: 16, color: EHadirTheme.textSecondary),
+                  ),
+                ),
+        ),
+        suffixIconConstraints:
+            const BoxConstraints(minWidth: 24, minHeight: 24),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(EHadirTheme.radiusSm),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(EHadirTheme.radiusSm),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(EHadirTheme.radiusSm),
+          borderSide:
+              BorderSide(color: EHadirTheme.primary.withValues(alpha: 0.5)),
+        ),
+      ),
     );
   }
 }

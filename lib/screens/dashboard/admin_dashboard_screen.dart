@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
+import '../../services/demo_seed_service.dart';
 import '../../models/user.dart';
 import '../../theme.dart';
 import '../../utils/dialogs.dart';
@@ -63,6 +64,34 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Muat Semula',
             onPressed: _loadUsers,
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Data Demo',
+            icon: const Icon(Icons.science_rounded),
+            onSelected: (action) {
+              if (action == 'seed') _seedDemoData();
+              if (action == 'clear') _clearDemoData();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'seed',
+                child: Row(children: [
+                  Icon(Icons.auto_awesome_rounded,
+                      size: 18, color: EHadirTheme.primary),
+                  SizedBox(width: 10),
+                  Text('Isi Data Demo (Module 3)'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'clear',
+                child: Row(children: [
+                  Icon(Icons.delete_sweep_rounded,
+                      size: 18, color: EHadirTheme.rejected),
+                  SizedBox(width: 10),
+                  Text('Padam Data Demo'),
+                ]),
+              ),
+            ],
           ),
         ],
         bottom: TabBar(
@@ -183,6 +212,77 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _seedDemoData() async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(
+      content: Text('Menulis data demo ke Firestore…'),
+      duration: Duration(seconds: 2),
+    ));
+    try {
+      final result = await ref.read(demoSeedServiceProvider).seedAll();
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: EHadirTheme.approved,
+        content: Text(
+          'Berjaya: ${result.attendanceClasses} kelas kehadiran + '
+          '${result.disciplineReports} laporan disiplin.',
+        ),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: EHadirTheme.rejected,
+        content: Text('Gagal isi data demo: $e'),
+      ));
+    }
+  }
+
+  Future<void> _clearDemoData() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: EHadirTheme.card,
+        title: const Text('Padam Data Demo'),
+        content: const Text(
+          'Tindakan ini akan memadam semua dokumen Firestore yang dimulakan '
+          'dengan "demo_". Data sebenar yang dimasukkan oleh pensyarah TIDAK '
+          'akan dipadam. Teruskan?',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: EHadirTheme.rejected),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Padam'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref.read(demoSeedServiceProvider).clearAll();
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: EHadirTheme.rejected,
+        content: Text(
+          'Dipadam: ${result.attendanceClasses} kelas + '
+          '${result.disciplineReports} laporan demo.',
+        ),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: EHadirTheme.rejected,
+        content: Text('Gagal padam data demo: $e'),
+      ));
+    }
   }
 
   Future<void> _approveUser(AppUser user) async {
