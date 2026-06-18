@@ -1,0 +1,26 @@
+# Only the built web bundle is needed for deploy.
+android/
+ios/
+macos/
+windows/
+linux/
+lib/
+test/
+build/linux/
+build/windows/
+build/macos/
+build/ios/
+build/android/
+build/flutter_assets/
+.dart_tool/
+.idea/
+.vscode/
+*.iml
+
+# Misc
+project-detail/
+firebase.json
+.firebaserc
+.metadata
+analysis_options.yaml
+pubspec.lock
