@@ -1,5 +1,64 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+enum DeleteReason { bersara, pindah, lainLain }
+
+extension DeleteReasonExt on DeleteReason {
+  String get displayName {
+    switch (this) {
+      case DeleteReason.bersara:
+        return 'Bersara';
+      case DeleteReason.pindah:
+        return 'Pindah';
+      case DeleteReason.lainLain:
+        return 'Lain-lain Sebab';
+    }
+  }
+
+  static DeleteReason fromString(String s) {
+    return DeleteReason.values.firstWhere(
+      (r) => r.name == s,
+      orElse: () => DeleteReason.lainLain,
+    );
+  }
+}
+
+class ArchivedUser {
+  final String id;
+  final String name;
+  final String email;
+  final UserRole role;
+  final String program;
+  final DateTime deletedAt;
+  final DeleteReason reason;
+  final String note;
+
+  const ArchivedUser({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.program,
+    required this.deletedAt,
+    required this.reason,
+    this.note = '',
+  });
+
+  factory ArchivedUser.fromFirestore(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    return ArchivedUser(
+      id: doc.id,
+      name: d['name'] ?? '',
+      email: d['email'] ?? '',
+      role: UserRoleExtension.fromString(d['role'] ?? 'pensyarah'),
+      program: d['program'] ?? '',
+      deletedAt:
+          (d['deletedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      reason: DeleteReasonExt.fromString(d['deleteReason'] ?? ''),
+      note: d['deleteNote'] as String? ?? '',
+    );
+  }
+}
+
 enum UserRole {
   pensyarah,    // Lecturer
   admin,

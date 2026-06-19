@@ -411,6 +411,29 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
             );
           }
         },
+        onDelete: (u, reason, note) async {
+          final auth = ref.read(authProvider);
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          final err = await auth.deleteAndArchiveUser(
+            u,
+            reason,
+            note: note.isEmpty ? null : note,
+          );
+          if (!mounted) return;
+          if (err != null) {
+            scaffoldMessenger.showSnackBar(
+                SnackBar(content: Text(err), backgroundColor: EHadirTheme.rejected));
+          } else {
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Akaun ${u.name} telah dipadam dan diarkibkan.'),
+                backgroundColor: EHadirTheme.rejected,
+              ),
+            );
+            _loadUsers();
+          }
+        },
       ),
     );
   }
@@ -807,9 +830,14 @@ class _UserDetailSheet extends StatefulWidget {
   final AppUser user;
   final Future<void> Function(AppUser updated) onSave;
   final Future<void> Function(AppUser u) onResetPassword;
+  final Future<void> Function(AppUser u, DeleteReason reason, String note) onDelete;
 
-  const _UserDetailSheet(
-      {required this.user, required this.onSave, required this.onResetPassword});
+  const _UserDetailSheet({
+    required this.user,
+    required this.onSave,
+    required this.onResetPassword,
+    required this.onDelete,
+  });
 
   @override
   State<_UserDetailSheet> createState() => _UserDetailSheetState();
@@ -964,9 +992,124 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
               side: const BorderSide(color: EHadirTheme.pending),
             ),
           ),
+          const SizedBox(height: 12),
+
+          const Divider(color: EHadirTheme.divider),
+          const SizedBox(height: 12),
+
+          OutlinedButton.icon(
+            onPressed: _saving ? null : () => _confirmDelete(context),
+            icon: const Icon(Icons.delete_forever_rounded),
+            label: const Text('Padam Pengguna'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: EHadirTheme.rejected,
+              side: const BorderSide(color: EHadirTheme.rejected),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    DeleteReason selectedReason = DeleteReason.bersara;
+    final noteCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: EHadirTheme.card,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(EHadirTheme.radiusLg)),
+          title: Row(
+            children: [
+              const Icon(Icons.delete_forever_rounded,
+                  color: EHadirTheme.rejected, size: 22),
+              const SizedBox(width: 10),
+              const Text('Sebab Pemadaman',
+                  style: TextStyle(
+                      color: EHadirTheme.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Pilih sebab pemadaman akaun ${widget.user.name}:',
+                style: const TextStyle(
+                    color: EHadirTheme.textSecondary, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              RadioGroup<DeleteReason>(
+                groupValue: selectedReason,
+                onChanged: (v) =>
+                    setDialogState(() => selectedReason = v!),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: DeleteReason.values
+                      .map((r) => RadioListTile<DeleteReason>(
+                            value: r,
+                            title: Text(r.displayName,
+                                style: const TextStyle(
+                                    color: EHadirTheme.textPrimary,
+                                    fontSize: 14)),
+                            activeColor: EHadirTheme.rejected,
+                            contentPadding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          ))
+                      .toList(),
+                ),
+              ),
+              if (selectedReason == DeleteReason.lainLain) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: noteCtrl,
+                  style: const TextStyle(
+                      color: EHadirTheme.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Nyatakan sebab...',
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(EHadirTheme.radiusSm)),
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: EHadirTheme.rejected),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              icon: const Icon(Icons.delete_forever_rounded, size: 16),
+              label: const Text('Padam'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final note = noteCtrl.text.trim();
+    noteCtrl.dispose();
+
+    if (confirmed != true || !context.mounted) return;
+
+    setState(() => _saving = true);
+    await widget.onDelete(widget.user, selectedReason, note);
+    if (!context.mounted) return;
+    setState(() => _saving = false);
+    Navigator.of(context).pop(); // close sheet
   }
 
   Widget _infoRow(String label, String value) {

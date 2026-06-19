@@ -91,7 +91,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       color: EHadirTheme.pending, size: 22),
                 ),
                 const SizedBox(width: 12),
-                const Text('Permohonan Dihantar',
+                const Text('Pendaftaran Berjaya',
                     style: TextStyle(
                         color: EHadirTheme.textPrimary,
                         fontSize: 18,
@@ -99,8 +99,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ],
             ),
             content: const Text(
-              'Akaun anda telah didaftarkan dan sedang menunggu kelulusan admin.\n\n'
-              'Anda akan dapat log masuk setelah admin meluluskan permohonan anda.',
+              'Pendaftaran Akaun berjaya dilakukan, sila tunggu pengesahan dari admin untuk log masuk.',
               style: TextStyle(
                   color: EHadirTheme.textSecondary,
                   fontSize: 14,

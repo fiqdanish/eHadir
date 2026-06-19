@@ -1,10 +1,43 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user.dart';
+
+// ─── Bulk-create DTOs ─────────────────────────────────────────
+
+class BulkUserData {
+  final String name;
+  final String email;
+  final String password;
+  final UserRole role;
+  final String program;
+
+  const BulkUserData({
+    required this.name,
+    required this.email,
+    required this.password,
+    required this.role,
+    required this.program,
+  });
+}
+
+class BulkCreateResult {
+  final String name;
+  final String email;
+  final bool success;
+  final String? error;
+
+  const BulkCreateResult({
+    required this.name,
+    required this.email,
+    required this.success,
+    this.error,
+  });
+}
 
 /// Wraps FirebaseAuth + Firestore user-profile operations.
 /// Exposes the current logged-in [AppUser] and auth state stream.
@@ -14,6 +47,7 @@ class AuthService extends ChangeNotifier {
 
   AppUser? _currentUser;
   bool _loading = true;
+  bool _isRegistering = false;
 
   AppUser? get currentUser => _currentUser;
   bool get isLoading => _loading;
@@ -26,6 +60,7 @@ class AuthService extends ChangeNotifier {
 
   // ─── Auth state listener ─────────────────────────────────
   Future<void> _onAuthStateChanged(User? firebaseUser) async {
+    if (_isRegistering) return; // skip cascading calls during registration
     if (firebaseUser == null) {
       _currentUser = null;
       _loading = false;
@@ -101,6 +136,7 @@ class AuthService extends ChangeNotifier {
     required UserRole role,
     required String program,
   }) async {
+    _isRegistering = true;
     try {
       final cred = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
@@ -117,20 +153,95 @@ class AuthService extends ChangeNotifier {
         role: role,
         program: program,
         passwordHash: hash,
-        isApproved: false, // pending until admin approves
+        isApproved: false,
       );
 
       await _db.collection('users').doc(uid).set(user.toFirestore());
-
-      // Sign out immediately — the user cannot access the app until approved
       await _auth.signOut();
       _currentUser = null;
-      return null; // success (pending)
+      _loading = false;
+      notifyListeners();
+      return null;
     } on FirebaseAuthException catch (e) {
       return _mapAuthError(e.code);
     } catch (e) {
       return 'Ralat pendaftaran. Sila cuba lagi.';
+    } finally {
+      _isRegistering = false;
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  BULK CREATE (admin)
+  // ═══════════════════════════════════════════════════════════
+
+  /// Creates multiple Firebase Auth accounts + Firestore profiles without
+  /// disturbing the admin's current session by using a secondary Firebase app.
+  /// All bulk-created accounts are immediately approved (isApproved: true).
+  Future<List<BulkCreateResult>> bulkCreateUsers(
+    List<BulkUserData> users, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final results = <BulkCreateResult>[];
+    final appName = 'bulkCreate_${DateTime.now().millisecondsSinceEpoch}';
+    final secondaryApp = await Firebase.initializeApp(
+      name: appName,
+      options: Firebase.app().options,
+    );
+
+    try {
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      for (int i = 0; i < users.length; i++) {
+        final userData = users[i];
+        try {
+          final cred = await secondaryAuth.createUserWithEmailAndPassword(
+            email: userData.email.trim(),
+            password: userData.password,
+          );
+
+          final uid = cred.user!.uid;
+          final appUser = AppUser(
+            id: uid,
+            name: userData.name.trim(),
+            email: userData.email.trim(),
+            role: userData.role,
+            program: userData.program,
+            passwordHash: _sha256(userData.password),
+            isApproved: true,
+          );
+
+          await _db.collection('users').doc(uid).set(appUser.toFirestore());
+          await secondaryAuth.signOut();
+
+          results.add(BulkCreateResult(
+            name: userData.name,
+            email: userData.email,
+            success: true,
+          ));
+        } on FirebaseAuthException catch (e) {
+          results.add(BulkCreateResult(
+            name: userData.name,
+            email: userData.email,
+            success: false,
+            error: _mapAuthError(e.code),
+          ));
+        } catch (_) {
+          results.add(BulkCreateResult(
+            name: userData.name,
+            email: userData.email,
+            success: false,
+            error: 'Ralat tidak dijangka',
+          ));
+        }
+
+        onProgress?.call(i + 1, users.length);
+      }
+    } finally {
+      await secondaryApp.delete();
+    }
+
+    return results;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -207,6 +318,35 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       return 'Gagal menolak pengguna.';
     }
+  }
+
+  /// Archive a user with a deletion reason, then remove from active users.
+  Future<String?> deleteAndArchiveUser(
+    AppUser user,
+    DeleteReason reason, {
+    String? note,
+  }) async {
+    try {
+      await _db.collection('archived_users').doc(user.id).set({
+        ...user.toFirestore(),
+        'deletedAt': FieldValue.serverTimestamp(),
+        'deleteReason': reason.name,
+        'deleteNote': note ?? '',
+      });
+      await _db.collection('users').doc(user.id).delete();
+      return null;
+    } catch (e) {
+      return 'Gagal memadam pengguna.';
+    }
+  }
+
+  /// Fetch all archived (deleted) users, newest first.
+  Future<List<ArchivedUser>> fetchArchivedUsers() async {
+    final snap = await _db
+        .collection('archived_users')
+        .orderBy('deletedAt', descending: true)
+        .get();
+    return snap.docs.map(ArchivedUser.fromFirestore).toList();
   }
 
   /// Simulates a password reset email. In production, call

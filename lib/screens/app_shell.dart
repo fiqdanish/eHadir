@@ -9,6 +9,8 @@ import 'dashboard/ketua_program_dashboard_screen.dart';
 import 'dashboard/ketua_jabatan_dashboard_screen.dart';
 import 'dashboard/tpa_dashboard_screen.dart';
 import 'dashboard/pensyarah_dashboard_screen.dart';
+import 'dashboard/bulk_create_users_screen.dart';
+import 'dashboard/archived_users_screen.dart';
 
 // Import modules
 import 'lecturer/ambil_kehadiran_screen.dart';
@@ -87,17 +89,21 @@ class AppShellState extends ConsumerState<AppShell> {
             body: const ReportingScreen(),
           );
 
-    // Jadual + Kehadiran are lecturer-only modules. Neither the Ketua Program
-    // nor the Ketua Jabatan teaches, so those two tabs are hidden for them.
-    final showLecturerTabs = role != UserRole.ketuaProgram &&
-        role != UserRole.ketuaJabatan;
+    // Jadual + Kehadiran are lecturer-only modules.
+    // KP, KJ, and Admin don't teach, so those two tabs are replaced or hidden.
+    final showLecturerTabs = role == UserRole.pensyarah ||
+        role == UserRole.timbalanPengarahAkademik;
 
     return [
       _NavTab(Icons.home_rounded, 'Utama', utama),
-      if (showLecturerTabs)
+      if (role == UserRole.admin) ...[
+        _NavTab(Icons.group_add_rounded, 'Cipta Pukal',
+            const BulkCreateUsersScreen()),
+        _NavTab(Icons.archive_rounded, 'Arkib',
+            const ArchivedUsersScreen()),
+      ] else if (showLecturerTabs) ...[
         _NavTab(Icons.calendar_month_rounded, 'Jadual',
             const WeeklyTimetableScreen()),
-      if (showLecturerTabs)
         _NavTab(
           Icons.fact_check_rounded,
           'Kehadiran',
@@ -106,6 +112,7 @@ class AppShellState extends ConsumerState<AppShell> {
             initialSlotId: _attendanceSlotId,
           ),
         ),
+      ],
       _NavTab(Icons.bar_chart_rounded, 'Laporan', laporan),
       _NavTab(Icons.person_rounded, 'Profil', const ProfileScreen()),
     ];
