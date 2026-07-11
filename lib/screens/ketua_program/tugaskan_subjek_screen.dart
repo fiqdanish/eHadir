@@ -6,7 +6,6 @@ import '../../models/subject.dart';
 import '../../models/user.dart';
 import '../../services/auth_service.dart';
 import '../../services/curriculum_service.dart';
-import '../../services/mock_db_service.dart';
 import '../../services/seed_data.dart';
 import '../../theme.dart';
 
@@ -22,43 +21,47 @@ class TugaskanSubjekScreen extends ConsumerStatefulWidget {
 }
 
 class _TugaskanSubjekScreenState extends ConsumerState<TugaskanSubjekScreen> {
-  bool _seeding = true;
+  bool _loading = true;
+  List<AppUser> _users = const []; // real registered users from Firestore
 
   @override
   void initState() {
     super.initState();
-    _ensureSeed();
+    _load();
   }
 
-  Future<void> _ensureSeed() async {
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
     final curriculum = ref.read(curriculumServiceProvider);
     final auth = ref.read(authProvider);
-    final db = ref.read(mockDbProvider);
 
-    // Push DED subject catalog into Firestore on first run so the dropdown
-    // has data even before any subject was uploaded.
-    await curriculum.seedSubjectsIfEmpty(SeedData.dedSubjects);
-
-    // Merge real registered users (Firestore) into the local list so the
-    // assignment binds to a real Firebase UID whenever possible.
+    // Seed the subject CATALOG only (not lecturers) so the assign sheet has
+    // options. Guarded + timed out so a denied/slow Firestore never hangs.
     try {
-      final firestoreUsers = await auth.fetchAllUsers();
-      db.mergeFirestoreUsers(firestoreUsers);
+      await curriculum
+          .seedSubjectsIfEmpty(SeedData.dedSubjects)
+          .timeout(const Duration(seconds: 8));
     } catch (_) {
-      // offline or unauthenticated — keep mock seed only
+      // rules / offline / slow — fall back to the local catalog
     }
 
-    if (mounted) setState(() => _seeding = false);
+    // Pull ONLY real, registered users from Firestore — no demo lecturers.
+    try {
+      _users = await auth.fetchAllUsers().timeout(const Duration(seconds: 8));
+    } catch (_) {
+      _users = const [];
+    }
+
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).currentUser!;
-    final db = ref.watch(mockDbProvider);
 
-    // Every lecturer whose program belongs to this Ketua Jabatan's department.
+    // Only real, registered lecturers whose program is in this department.
     final programKeys = Department.programsOf[user.program] ?? const [];
-    final lecturers = db.users
+    final lecturers = _users
         .where((u) =>
             u.role == UserRole.pensyarah &&
             programKeys.contains(Department.programKeyOf(u.program)))
@@ -68,8 +71,15 @@ class _TugaskanSubjekScreenState extends ConsumerState<TugaskanSubjekScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tugaskan Subjek'),
+        actions: [
+          IconButton(
+            tooltip: 'Muat semula senarai pensyarah',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loading ? null : _load,
+          ),
+        ],
       ),
-      body: _seeding
+      body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
@@ -506,7 +516,8 @@ class _EmptyLecturerHint extends StatelessWidget {
                   color: EHadirTheme.textSecondary.withValues(alpha: 0.3)),
               const SizedBox(height: 16),
               const Text(
-                'Tiada pensyarah dalam jabatan ini.',
+                'Tiada pensyarah berdaftar dalam jabatan ini.\n'
+                'Daftarkan akaun pensyarah dahulu, kemudian tekan muat semula.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: EHadirTheme.textSecondary),
               ),
