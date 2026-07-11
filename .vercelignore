@@ -1,10 +1,10 @@
-# Only the built web bundle is needed for deploy.
+# Vercel builds the web app from source (see vercel.json), so lib/, web/, and
+# pubspec.* must stay. Only the things the WEB build never needs are ignored.
 android/
 ios/
 macos/
 windows/
 linux/
-lib/
 test/
 build/linux/
 build/windows/
@@ -23,4 +23,3 @@ firebase.json
 .firebaserc
 .metadata
 analysis_options.yaml
-pubspec.lock
