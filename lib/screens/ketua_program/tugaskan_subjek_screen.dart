@@ -318,6 +318,7 @@ class _AssignSheet extends ConsumerStatefulWidget {
 
 class _AssignSheetState extends ConsumerState<_AssignSheet> {
   final Set<String> _selectedCodes = {};
+  List<Subject> _subjects = const []; // latest subjects shown in the sheet
 
   @override
   Widget build(BuildContext context) {
@@ -364,13 +365,14 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
             ),
             Expanded(
               child: StreamBuilder<List<Subject>>(
-                stream:
-                    curriculum.streamSubjectsForProgram(widget.lecturer.program),
+                stream: curriculum.streamSubjectsForProgramKey(
+                    Department.programKeyOf(widget.lecturer.program)),
                 builder: (ctx, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
                   final subjects = snap.data ?? const <Subject>[];
+                  _subjects = subjects; // capture for _save
                   if (subjects.isEmpty) {
                     return const Center(
                       child: Padding(
@@ -468,10 +470,9 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
   }
 
   Future<void> _save(CurriculumService curriculum) async {
-    // Look up the chosen subjects from a one-off fetch (the lecturer's program).
-    final subjects =
-        await curriculum.getSubjectsForPrograms([widget.lecturer.program]);
-    final chosen = subjects.where((s) => _selectedCodes.contains(s.code));
+    // Use the subjects already shown in the sheet — avoids any program-label
+    // mismatch that a re-fetch by exact program string could cause.
+    final chosen = _subjects.where((s) => _selectedCodes.contains(s.code));
 
     for (final s in chosen) {
       final a = LecturerAssignment(

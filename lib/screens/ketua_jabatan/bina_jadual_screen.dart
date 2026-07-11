@@ -7,7 +7,6 @@ import '../../models/user.dart';
 import '../../services/auth_service.dart';
 import '../../services/curriculum_service.dart';
 import '../../services/mock_db_service.dart';
-import '../../services/seed_data.dart';
 import '../../theme.dart';
 
 /// Ketua Program: pulls every LecturerAssignment for their program (created by
@@ -22,55 +21,6 @@ class BinaJadualScreen extends ConsumerStatefulWidget {
 }
 
 class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
-  bool _seeding = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _autoSeed());
-  }
-
-  /// Ensures KJ has data even when no Ketua Program has assigned subjects
-  /// yet — pre-populates the DED roster from the JAN-JUN 2026 senarai.
-  Future<void> _autoSeed() async {
-    final curriculum = ref.read(curriculumServiceProvider);
-    setState(() => _seeding = true);
-    try {
-      await curriculum.seedAssignmentsIfEmpty(SeedData.dedAssignments);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal memuat seed: $e'),
-            backgroundColor: EHadirTheme.rejected,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _seeding = false);
-    }
-  }
-
-  Future<void> _forceSeed() async {
-    final curriculum = ref.read(curriculumServiceProvider);
-    setState(() => _seeding = true);
-    try {
-      for (final a in SeedData.dedAssignments) {
-        await curriculum.upsertAssignment(a);
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  '${SeedData.dedAssignments.length} tugasan DED dimuat.'),
-              backgroundColor: EHadirTheme.approved),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _seeding = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).currentUser!;
@@ -81,18 +31,10 @@ class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bina Jadual'),
-        actions: [
-          IconButton(
-            tooltip: 'Muat semula tugasan DED',
-            icon: const Icon(Icons.cloud_download_rounded),
-            onPressed: _seeding ? null : _forceSeed,
-          ),
-        ],
       ),
       body: Column(
         children: [
           _DeptHeader(program: program, programKey: programKey),
-          if (_seeding) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: StreamBuilder<List<LecturerAssignment>>(
               stream: curriculum.streamAssignmentsForProgramKey(programKey),
@@ -100,9 +42,13 @@ class _BinaJadualScreenState extends ConsumerState<BinaJadualScreen> {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final assignments = snap.data ?? const <LecturerAssignment>[];
+                // Only real, registered lecturers — hide any leftover demo
+                // seed assignments (seed lecturer ids look like "lec_ded_01").
+                final assignments = (snap.data ?? const <LecturerAssignment>[])
+                    .where((a) => !a.lecturerId.startsWith('lec_'))
+                    .toList();
                 if (assignments.isEmpty) {
-                  return _EmptyHint(onSeed: _forceSeed);
+                  return const _EmptyHint();
                 }
                 // Group by program so KJ can scan one course at a time.
                 final byProgram = <String, List<LecturerAssignment>>{};
@@ -806,8 +752,7 @@ class _TimeCard extends StatelessWidget {
 }
 
 class _EmptyHint extends StatelessWidget {
-  final VoidCallback onSeed;
-  const _EmptyHint({required this.onSeed});
+  const _EmptyHint();
 
   @override
   Widget build(BuildContext context) => Center(
@@ -821,23 +766,20 @@ class _EmptyHint extends StatelessWidget {
                   color: EHadirTheme.textSecondary.withValues(alpha: 0.3)),
               const SizedBox(height: 16),
               const Text(
-                'Tiada tugasan dari Ketua Program.',
+                'Tiada tugasan lagi.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: EHadirTheme.textSecondary),
+                style: TextStyle(
+                    color: EHadirTheme.textPrimary,
+                    fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
               const Text(
-                'Anda boleh muat senarai DED dari rekod JAN-JUN 2026 '
-                'untuk mula menjadualkan.',
+                'Ketua Jabatan perlu menugaskan subjek kepada pensyarah dalam '
+                '"Tugaskan Subjek" dahulu. Ia akan muncul di sini untuk anda '
+                'susun tarikh, masa, dan bilik.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     color: EHadirTheme.textSecondary, fontSize: 12),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: onSeed,
-                icon: const Icon(Icons.cloud_download_rounded, size: 18),
-                label: const Text('Muat Tugasan DED'),
               ),
             ],
           ),

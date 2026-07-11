@@ -28,6 +28,20 @@ class CurriculumService extends ChangeNotifier {
           ..sort((a, b) => a.code.compareTo(b.code)));
   }
 
+  /// Subjects for a program matched by program *key* (e.g. "DED") so it's
+  /// robust to differences in the full program label (dash style "—" vs "-",
+  /// spacing, etc.) between a lecturer's program and the subject records.
+  Stream<List<Subject>> streamSubjectsForProgramKey(String programKey) {
+    return _db
+        .collection(_subjectsCol)
+        .snapshots()
+        .map((s) => s.docs
+            .map(Subject.fromFirestore)
+            .where((sub) => Department.programKeyOf(sub.program) == programKey)
+            .toList()
+          ..sort((a, b) => a.code.compareTo(b.code)));
+  }
+
   Future<List<Subject>> getSubjectsForPrograms(List<String> programs) async {
     if (programs.isEmpty) return const [];
     // Firestore `whereIn` caps at 30 items — diploma deps stay under that.
