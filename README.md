@@ -2,7 +2,7 @@
 
 **eHadir** is a modern, cross-platform application built with **Flutter** and backed by **Firebase**. It is designed specifically for educational institutions (such as colleges and universities) to streamline schedule creation, track student attendance, and monitor discipline reports in real time.
 
-🌐 **Live Beta:** [Try eHadir Here](https://ehadir-beta.vercel.app/)
+🌐 **Live Beta:** [Try eHadir Here](https://e-hadir-live.vercel.app/)
 ---
 ## Getting Started
 
